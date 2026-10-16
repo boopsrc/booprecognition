@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from booprecognition.config.container import build_container
-from booprecognition.config.settings import Settings
+from booprecognition.config.settings import CollectionsConfig, load_settings
 
 pytestmark = pytest.mark.integration
 
@@ -28,9 +28,12 @@ def _image(env: str) -> bytes:
 
 def test_register_identify_remove() -> None:
     a1, a2, b = _image("BOOP_TEST_FACE_A1"), _image("BOOP_TEST_FACE_A2"), _image("BOOP_TEST_FACE_B")
-    services = build_container(
-        Settings(persons_collection="persons_it", embeddings_collection="embeddings_it")
+    settings = load_settings()
+    settings.databases.firestore.collections = CollectionsConfig(
+        persons="persons_it", embeddings="embeddings_it"
     )
+    settings.databases.mongodb.collections = settings.databases.firestore.collections
+    services = build_container(settings)
 
     created = services.register_person.execute(a1)
     person_id = created.person.identification

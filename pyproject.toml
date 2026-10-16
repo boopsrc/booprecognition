@@ -5,19 +5,22 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "booprecognition"
 version = "0.1.0"
-description = "Motor agnóstico de reconhecimento facial com embeddings no Firestore"
+description = "Motor agnóstico de reconhecimento facial com embeddings no Firestore ou MongoDB"
 requires-python = ">=3.11"
 dependencies = [
     "numpy>=1.26",
-    "pydantic-settings>=2.2",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]
 encoder = ["insightface>=0.7.3", "onnxruntime>=1.17", "opencv-python-headless>=4.9"]
 firestore = ["google-cloud-firestore>=2.16"]
+mongodb = ["pymongo>=4.7"]
 api = ["fastapi>=0.110", "uvicorn[standard]>=0.29", "python-multipart>=0.0.9"]
-dev = ["pytest>=8", "ruff>=0.4", "mypy>=1.10", "httpx>=0.27"]
-all = ["booprecognition[encoder,firestore,api]"]
+dev = ["pytest>=8", "ruff>=0.4", "mypy>=1.10", "httpx>=0.27", "mongomock>=4.1"]
+all = ["booprecognition[encoder,firestore,mongodb,api]"]
 
 [project.scripts]
 booprecognition = "booprecognition.interfaces.cli.main:main"

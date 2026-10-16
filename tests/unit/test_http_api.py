@@ -15,7 +15,7 @@ from tests.unit.test_use_cases import FakeEncoder
 @pytest.fixture
 def client() -> TestClient:
     container = build_container(
-        Settings(storage="memory"), encoder=FakeEncoder(), repository=InMemoryFaceRepository()
+        Settings(target="memory"), encoder=FakeEncoder(), repository=InMemoryFaceRepository()
     )
     return TestClient(create_app(container))
 

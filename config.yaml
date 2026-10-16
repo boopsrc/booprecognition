@@ -1,0 +1,32 @@
+# Configuração do motor booprecognition.
+
+# Banco usado pelo motor: firestore | mongodb | memory
+target: firestore
+project: booprecognition
+
+setup-alg:
+  knn_k: 5                    # vizinhos consultados na busca KNN
+  match_threshold: 0.5        # precision mínima para reconhecer a pessoa
+  max_embeddings_person: 10   # tamanho do histórico FIFO por pessoa
+  encoder_model: buffalo_l    # modelo InsightFace (ArcFace 512-d)
+  id_digits: 9                # dígitos do identificador aleatório
+
+databases:
+  firestore:
+    project_id: booprecognition                     
+    credentials_env: GOOGLE_APPLICATION_CREDENTIALS
+    collections:
+      persons: boop-persons
+      embeddings: boop-embeddings-history
+
+  mongodb:
+    uri_env: BOOP_MONGODB_URI   
+    database: booprecognition
+    collections:
+      persons: boop-persons
+      embeddings: boop-embeddings-history
+    use_transactions: true      # Desligue em Mongo standalone
+    vector_search:
+      mode: atlas               # atlas ($vectorSearch) | brute_force (cosseno em Python, dev)
+      index_name: boop_vector_index
+      num_candidates: 100       # candidatos avaliados pelo HNSW antes do top-K

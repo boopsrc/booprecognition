@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
+COPY config.yaml ./
 RUN pip install --no-cache-dir ".[all]"
 
 # Baixa o modelo ArcFace no build para evitar latência na primeira requisição
