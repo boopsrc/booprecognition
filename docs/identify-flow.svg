@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 360" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="360" rx="16" fill="#0f172a"/>
+  <text x="450" y="40" text-anchor="middle" fill="#f8fafc" font-size="22" font-weight="700">Fluxo de identificação</text>
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/></marker></defs>
+
+  <g font-size="13" text-anchor="middle">
+    <rect x="20" y="80" width="140" height="80" rx="12" fill="#334155"/>
+    <text x="90" y="112" fill="#f8fafc" font-weight="700">1. Imagem</text>
+    <text x="90" y="132" fill="#94a3b8">JPG/PNG (bytes)</text>
+    <text x="90" y="148" fill="#f87171" font-size="11">não é salva</text>
+
+    <rect x="195" y="80" width="150" height="80" rx="12" fill="#7c3aed"/>
+    <text x="270" y="112" fill="#fff" font-weight="700">2. InsightFace</text>
+    <text x="270" y="132" fill="#ede9fe">maior rosto →</text>
+    <text x="270" y="148" fill="#ede9fe">vetor 512-d (L2)</text>
+
+    <rect x="380" y="80" width="150" height="80" rx="12" fill="#ea580c"/>
+    <text x="455" y="112" fill="#fff" font-weight="700">3. Firestore</text>
+    <text x="455" y="132" fill="#ffedd5">find_nearest</text>
+    <text x="455" y="148" fill="#ffedd5">COSINE · K=5</text>
+
+    <rect x="565" y="80" width="150" height="80" rx="12" fill="#16a34a"/>
+    <text x="640" y="112" fill="#fff" font-weight="700">4. KnnClassifier</text>
+    <text x="640" y="132" fill="#dcfce7">voto ponderado</text>
+    <text x="640" y="148" fill="#dcfce7">por similaridade</text>
+
+    <rect x="750" y="80" width="130" height="80" rx="12" fill="#334155"/>
+    <text x="815" y="112" fill="#f8fafc" font-weight="700">5. precision</text>
+    <text x="815" y="132" fill="#94a3b8">≥ threshold?</text>
+    <text x="815" y="148" fill="#94a3b8">(padrão 0.5)</text>
+  </g>
+  <line x1="160" y1="120" x2="190" y2="120" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="345" y1="120" x2="375" y2="120" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="530" y1="120" x2="560" y2="120" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="715" y1="120" x2="745" y2="120" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+
+  <path d="M780 160 L780 210 L620 210 L620 225" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#a)"/>
+  <path d="M850 160 L850 225" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#a)"/>
+  <text x="700" y="203" fill="#4ade80" font-size="12" text-anchor="middle">sim</text>
+  <text x="870" y="200" fill="#f87171" font-size="12">não</text>
+
+  <rect x="430" y="230" width="380" height="110" rx="12" fill="#14532d" stroke="#22c55e"/>
+  <text x="445" y="255" fill="#86efac" font-size="13" font-weight="700">Resposta + salva embedding no histórico</text>
+  <text x="445" y="280" fill="#f8fafc" font-size="13" font-family="Consolas, monospace">{ "identification": 482913057,</text>
+  <text x="445" y="298" fill="#f8fafc" font-size="13" font-family="Consolas, monospace">  "precision": 0.87,</text>
+  <text x="445" y="316" fill="#f8fafc" font-size="13" font-family="Consolas, monospace">  "history": [213, 245, 345, 634] }</text>
+  <rect x="820" y="230" width="60" height="40" rx="10" fill="#7f1d1d"/>
+  <text x="850" y="255" fill="#fecaca" font-size="13" text-anchor="middle" font-family="Consolas, monospace">null</text>
+
+  <text x="30" y="260" fill="#94a3b8" font-size="12">precision = média(sim. do vencedor)</text>
+  <text x="30" y="278" fill="#94a3b8" font-size="12">          × (votos do vencedor / K)</text>
+  <text x="30" y="306" fill="#94a3b8" font-size="12">history = IDs dos embeddings vizinhos</text>
+  <text x="30" y="324" fill="#94a3b8" font-size="12">          que votaram no vencedor</text>
+</svg>

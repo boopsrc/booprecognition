@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="400" rx="16" fill="#0f172a"/>
+  <text x="450" y="40" text-anchor="middle" fill="#f8fafc" font-size="22" font-weight="700">Como os embeddings são salvos no Firestore</text>
+
+  <!-- árvore -->
+  <g font-family="Consolas, monospace" font-size="13">
+    <rect x="30" y="70" width="400" height="300" rx="14" fill="#1e293b" stroke="#ea580c"/>
+    <text x="50" y="100" fill="#fdba74" font-weight="700">persons/</text>
+    <text x="70" y="125" fill="#f8fafc">482913057</text>
+    <text x="90" y="147" fill="#94a3b8">identification: 482913057</text>
+    <text x="90" y="166" fill="#94a3b8">created_at / updated_at</text>
+    <text x="90" y="185" fill="#94a3b8">embedding_ids: [213, 245, …] ≤ 10</text>
+    <text x="90" y="212" fill="#fdba74" font-weight="700">embeddings/</text>
+    <text x="110" y="236" fill="#f8fafc">213</text>
+    <text x="130" y="256" fill="#94a3b8">embedding_id, person_id</text>
+    <text x="130" y="275" fill="#94a3b8">vector: Vector(512)</text>
+    <text x="130" y="294" fill="#94a3b8">created_at</text>
+    <text x="110" y="318" fill="#f8fafc">245 …</text>
+    <text x="50" y="352" fill="#64748b" font-size="11">índice vetorial: group "embeddings" · dim 512</text>
+  </g>
+
+  <!-- FIFO -->
+  <text x="470" y="95" fill="#f8fafc" font-size="15" font-weight="700">Histórico FIFO (máx. 10 por pessoa)</text>
+  <g font-size="12" text-anchor="middle" font-family="Consolas, monospace">
+    <rect x="470" y="115" width="36" height="36" rx="6" fill="#7f1d1d"/><text x="488" y="138" fill="#fecaca">1</text>
+    <rect x="510" y="115" width="36" height="36" rx="6" fill="#2563eb"/><text x="528" y="138" fill="#fff">2</text>
+    <rect x="550" y="115" width="36" height="36" rx="6" fill="#2563eb"/><text x="568" y="138" fill="#fff">3</text>
+    <rect x="590" y="115" width="36" height="36" rx="6" fill="#2563eb"/><text x="608" y="138" fill="#fff">4</text>
+    <rect x="630" y="115" width="36" height="36" rx="6" fill="#2563eb"/><text x="648" y="138" fill="#fff">5</text>
+    <rect x="670" y="115" width="36" height="36" rx="6" fill="#2563eb"/><text x="688" y="138" fill="#fff">6</text>
+    <rect x="710" y="115" width="36" height="36" rx="6" fill="#2563eb"/><text x="728" y="138" fill="#fff">7</text>
+    <rect x="750" y="115" width="36" height="36" rx="6" fill="#2563eb"/><text x="768" y="138" fill="#fff">8</text>
+    <rect x="790" y="115" width="36" height="36" rx="6" fill="#2563eb"/><text x="808" y="138" fill="#fff">9</text>
+    <rect x="830" y="115" width="36" height="36" rx="6" fill="#2563eb"/><text x="848" y="138" fill="#fff">10</text>
+    <rect x="830" y="175" width="36" height="36" rx="6" fill="#16a34a"/><text x="848" y="198" fill="#fff">11</text>
+  </g>
+  <text x="488" y="172" fill="#f87171" font-size="12" text-anchor="middle">removido</text>
+  <text x="820" y="198" fill="#4ade80" font-size="12" text-anchor="end">novo embedding entra →</text>
+
+  <g font-size="13" fill="#cbd5e1">
+    <text x="470" y="250">• Cada identificação bem-sucedida grava o vetor novo</text>
+    <text x="470" y="272">  e apaga o mais antigo num único batch atômico.</text>
+    <text x="470" y="302">• Só vetores são salvos — nenhuma imagem é guardada.</text>
+    <text x="470" y="332">• Sem reprocessar fotos: o KNN roda direto no índice</text>
+    <text x="470" y="354">  vetorial nativo do Firestore.</text>
+  </g>
+</svg>

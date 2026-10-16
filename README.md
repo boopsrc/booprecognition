@@ -1,72 +1,192 @@
-# booprecognition
+<div align="center">
 
-Motor agnóstico de reconhecimento facial. Guarda **somente embeddings** (ArcFace, 512-d) no Firestore — nunca imagens — e identifica pessoas por KNN usando a busca vetorial nativa do Firestore.
+# 👁️ booprecognition
 
-## Serviços
+**Motor agnóstico de reconhecimento facial em Python**<br>
+Embeddings ArcFace · KNN vetorial no Firestore · Clean Architecture
 
-| Serviço | HTTP | CLI | Comportamento |
-|---|---|---|---|
-| Identificar | `POST /identify` (multipart `image`) | `booprecognition identify foto.jpg` | Retorna a pessoa ou `null`. Se encontrada, salva o novo embedding no histórico (máx. 10, o mais antigo é substituído). |
-| Cadastrar | `POST /persons` (multipart `image`) | `booprecognition register foto.jpg` | Se já existir, retorna a existente (`200`, `created: false`); senão cria com ID aleatório (`201`). |
-| Remover | `DELETE /persons/{id}` | `booprecognition remove 123456789` | Remove a pessoa e todos os embeddings (`404` se não existir). |
+<p>
+  <img alt="Python" src="https://img.shields.io/badge/python-3.11+-3776AB?logo=python&logoColor=white">
+  <img alt="Firestore" src="https://img.shields.io/badge/Firestore-vector%20search-FFCA28?logo=firebase&logoColor=black">
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-HTTP-009688?logo=fastapi&logoColor=white">
+  <img alt="InsightFace" src="https://img.shields.io/badge/InsightFace-ArcFace%20512d-7c3aed">
+</p>
 
-Saída:
+</div>
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+### 🔒 Sem imagens
+Só o **vetor** do rosto (512 números) é salvo. A foto é descartada logo depois do processamento.
+
+</td>
+<td width="33%" valign="top">
+
+### ⚡ Sem reprocessar
+O KNN roda direto no **índice vetorial nativo** do Firestore. Nenhuma foto antiga precisa ser lida de novo.
+
+</td>
+<td width="33%" valign="top">
+
+### 🧩 Agnóstico
+Modelo, banco e framework ficam atrás de **portas**. Trocar qualquer um deles exige só um novo adaptador.
+
+</td>
+</tr>
+</table>
+
+---
+
+## 📤 Resposta
+
 ```json
-{ "identification": 123123123, "precision": 0.87, "history": [213, 245, 345, 634, 346] }
-```
-- `precision` (0–1): similaridade média dos vizinhos vencedores × fração dos K votos.
-- `history`: IDs dos embeddings vizinhos que sustentaram a decisão.
-
-Erros: `422` sem rosto/imagem inválida, `404` pessoa inexistente.
-
-## Arquitetura
-
-```
-src/booprecognition/
-  domain/          entidades, value objects, KnnClassifier (Python puro)
-  application/     portas (Protocols), DTOs, casos de uso
-  infrastructure/  InsightFace, Firestore, in-memory, gerador de IDs
-  interfaces/      FastAPI e CLI (frameworks ficam só aqui)
-  config/          Settings (.env) e composition root (container.py)
-```
-Dependências apontam para dentro: domínio não conhece aplicação; aplicação não conhece infraestrutura nem framework. Trocar o modelo facial ou o banco = novo adaptador + `container.py`.
-
-## Firestore
-
-```
-persons/{personId}                          identification, created_at, updated_at, embedding_ids[≤10]
-persons/{personId}/embeddings/{embeddingId} embedding_id, person_id, vector (Vector 512), created_at
+{
+  "identification": 482913057,
+  "precision": 0.87,
+  "history": [213, 245, 345, 634, 346]
+}
 ```
 
-Crie o índice vetorial (uma vez por nome de coleção):
+| Campo | Significado |
+|---|---|
+| `identification` | ID aleatório de 9 dígitos da pessoa |
+| `precision` | `0–1`: similaridade média dos vizinhos vencedores × fração dos K votos |
+| `history` | IDs dos embeddings vizinhos que sustentaram a conclusão |
+
+---
+
+## 🛠️ Os 3 serviços
+
+<table>
+<tr><th>Serviço</th><th>HTTP</th><th>CLI</th><th>O que faz</th></tr>
+<tr>
+<td>🔍 <b>Identificar</b></td>
+<td><code>POST /identify</code></td>
+<td><code>booprecognition identify foto.jpg</code></td>
+<td>Retorna a pessoa ou <code>null</code>. Se encontrar, guarda o novo embedding no histórico (máx. 10; o mais antigo sai).</td>
+</tr>
+<tr>
+<td>➕ <b>Cadastrar</b></td>
+<td><code>POST /persons</code></td>
+<td><code>booprecognition register foto.jpg</code></td>
+<td>Verifica antes se a pessoa existe. Se existir, devolve <code>200</code> com <code>created: false</code>; senão cria e devolve <code>201</code>.</td>
+</tr>
+<tr>
+<td>🗑️ <b>Remover</b></td>
+<td><code>DELETE /persons/{id}</code></td>
+<td><code>booprecognition remove 482913057</code></td>
+<td>Apaga a pessoa e todos os seus embeddings (<code>404</code> se não existir).</td>
+</tr>
+</table>
+
+Os uploads usam multipart com o campo `image`. Erros: `422` quando não há rosto ou a imagem é inválida, `404` quando a pessoa não existe.
+
+---
+
+## 🔄 Como funciona a identificação
+
+![Fluxo de identificação](docs/identify-flow.png)
+
+1. A imagem chega em bytes e **não é salva**.
+2. O **InsightFace** detecta o maior rosto e gera um vetor ArcFace de 512 dimensões, normalizado (L2).
+3. O **Firestore** devolve os K=5 vetores mais próximos por cosseno (`find_nearest`).
+4. O **KnnClassifier** soma os votos de cada pessoa, ponderados pela similaridade.
+5. Se `precision ≥ threshold`, responde e grava o vetor novo no histórico; senão retorna `null`.
+
+---
+
+## 💾 Como os embeddings são salvos
+
+![Como os embeddings são salvos no Firestore](docs/embedding-storage.png)
+
+```
+persons/{personId}
+ ├─ identification, created_at, updated_at
+ ├─ embedding_ids: [213, 245, …]          ← ordem do mais antigo ao mais novo, ≤ 10
+ └─ embeddings/{embeddingId}
+     ├─ embedding_id, person_id
+     ├─ vector: Vector(512)               ← único dado biométrico guardado
+     └─ created_at
+```
+
+<details>
+<summary><b>Por que guardar até 10 embeddings por pessoa?</b></summary>
+
+<br>
+Cada identificação acrescenta um vetor recente da pessoa, com outra luz, outro ângulo ou outra idade, e isso deixa as próximas buscas mais precisas. Com o limite em 10, o custo fica previsível: quando entra o 11º, o mais antigo é apagado **no mesmo batch atômico** (`append_embedding`).
+</details>
+
+<details>
+<summary><b>Criar o índice vetorial (obrigatório)</b></summary>
+
 ```bash
 gcloud firestore indexes composite create --collection-group=embeddings --query-scope=COLLECTION_GROUP --field-config=field-path=vector,vector-config='{"dimension":"512","flat":"{}"}'
 ```
+Crie um índice para cada nome de coleção de embeddings (por exemplo `embeddings_it`, usado nos testes de integração).
+</details>
 
-## Setup
+---
+
+## 🏛️ Arquitetura
+
+![Clean Architecture do motor](docs/architecture.png)
+
+<table>
+<tr><th>Camada</th><th>Pasta</th><th>Responsabilidade</th><th>Depende de</th></tr>
+<tr><td>🟢 Domain</td><td><code>domain/</code></td><td>Entidades, <code>Embedding</code>, <code>KnnClassifier</code>, regra FIFO</td><td>nada</td></tr>
+<tr><td>🔵 Application</td><td><code>application/</code></td><td>Casos de uso, portas (<code>Protocol</code>) e DTOs</td><td>Domain</td></tr>
+<tr><td>⚙️ Infrastructure</td><td><code>infrastructure/</code></td><td>InsightFace, Firestore, in-memory, IDs</td><td>Application, Domain</td></tr>
+<tr><td>🌐 Interfaces</td><td><code>interfaces/</code></td><td>FastAPI e CLI: só traduzem a entrada e a saída</td><td>Application</td></tr>
+<tr><td>🔌 Config</td><td><code>config/</code></td><td><code>Settings</code> (.env) e <code>container.py</code> (composition root)</td><td>todas</td></tr>
+</table>
+
+> **Trocar uma peça:** escreva uma classe que implemente a porta (por exemplo outro `FaceEncoder` ou um `PersonRepository` em Postgres) e registre-a em `config/container.py`. Domínio e casos de uso não mudam.
+
+---
+
+## 🚀 Começando
 
 ```bash
 py -m venv .venv
 .venv/Scripts/python -m pip install -e ".[all,dev]"
-cp .env.example .env   # configure credenciais e projeto
+cp .env.example .env
 .venv/Scripts/booprecognition serve
 ```
 
-`BOOP_STORAGE=memory` roda sem Firestore (dev local).
+Com `BOOP_STORAGE=memory`, o motor roda sem Firestore (bom para desenvolvimento local).
 
-## Testes
+<details>
+<summary><b>⚙️ Variáveis de ambiente</b></summary>
+
+| Variável | Padrão | Descrição |
+|---|---|---|
+| `GOOGLE_APPLICATION_CREDENTIALS` | — | Service account do Firebase |
+| `BOOP_FIRESTORE_PROJECT` | — | ID do projeto |
+| `BOOP_STORAGE` | `firestore` | `firestore` ou `memory` |
+| `BOOP_KNN_K` | `5` | Vizinhos consultados |
+| `BOOP_MATCH_THRESHOLD` | `0.5` | `precision` mínima para reconhecer |
+| `BOOP_MAX_EMBEDDINGS_PER_PERSON` | `10` | Tamanho do histórico FIFO |
+| `BOOP_ENCODER_MODEL` | `buffalo_l` | Modelo InsightFace |
+</details>
+
+<details>
+<summary><b>🧪 Testes</b></summary>
 
 ```bash
 .venv/Scripts/python -m pytest
 ```
-Integração (Firestore + modelo reais, coleções `persons_it`/`embeddings_it`, exige o índice para `embeddings_it`):
+Integração com Firestore e modelo reais (precisa das variáveis `BOOP_TEST_FACE_A1`, `BOOP_TEST_FACE_A2` e `BOOP_TEST_FACE_B`):
 ```bash
 .venv/Scripts/python -m pytest -m integration
 ```
-Variáveis: `BOOP_TEST_FACE_A1`, `BOOP_TEST_FACE_A2` (mesma pessoa), `BOOP_TEST_FACE_B`.
+</details>
 
-## Docker
+<details>
+<summary><b>🐳 Docker</b></summary>
 
 ```bash
 docker build -t booprecognition .
 ```
+</details>
