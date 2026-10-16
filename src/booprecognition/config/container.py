@@ -50,6 +50,7 @@ def build_repository(settings: Settings) -> Any:
     factories: dict[str, Callable[[Settings], Any]] = {
         "firestore": _build_firestore,
         "mongodb": _build_mongodb,
+        "sqlite": _build_sqlite,
         "memory": _build_memory,
     }
     return factories[settings.target](settings)
@@ -110,3 +111,18 @@ def _build_mongodb(settings: Settings) -> Any:
     )
     repo.ensure_indexes()
     return repo
+
+
+def _build_sqlite(settings: Settings) -> Any:
+    from booprecognition.infrastructure.persistence.sqlite_repository import (
+        SqliteFaceRepository,
+    )
+
+    cfg = settings.databases.sqlite
+    return SqliteFaceRepository(
+        read_secret(cfg.path_env) or cfg.path,
+        persons_table=cfg.tables.persons,
+        embeddings_table=cfg.tables.embeddings,
+        search_mode=cfg.vector_search.mode,
+        dimension=cfg.vector_search.dimension,
+    )

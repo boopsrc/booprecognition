@@ -3,12 +3,13 @@
 # 👁️ booprecognition
 
 **Motor agnóstico de reconhecimento facial em Python**<br>
-Embeddings ArcFace · KNN vetorial no Firestore **ou** MongoDB · Clean Architecture
+Embeddings ArcFace · KNN vetorial no Firestore, MongoDB **ou** SQLite · Clean Architecture
 
 <p>
   <img alt="Python" src="https://img.shields.io/badge/python-3.11+-3776AB?logo=python&logoColor=white">
   <img alt="Firestore" src="https://img.shields.io/badge/Firestore-vector%20search-FFCA28?logo=firebase&logoColor=black">
   <img alt="MongoDB" src="https://img.shields.io/badge/MongoDB-%24vectorSearch-47A248?logo=mongodb&logoColor=white">
+  <img alt="SQLite" src="https://img.shields.io/badge/SQLite-local-003B57?logo=sqlite&logoColor=white">
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-HTTP-009688?logo=fastapi&logoColor=white">
   <img alt="InsightFace" src="https://img.shields.io/badge/InsightFace-ArcFace%20512d-7c3aed">
 </p>
@@ -26,7 +27,7 @@ Só o **vetor** do rosto (512 números) é salvo. A foto é descartada logo depo
 <td width="33%" valign="top">
 
 ### ⚡ Sem reprocessar
-O KNN roda direto no **índice vetorial nativo** do banco (Firestore ou MongoDB). Nenhuma foto antiga precisa ser lida de novo.
+O KNN roda direto no **índice vetorial nativo** do banco (Firestore, MongoDB ou SQLite). Nenhuma foto antiga precisa ser lida de novo.
 
 </td>
 <td width="33%" valign="top">
@@ -92,7 +93,7 @@ Os uploads usam multipart com o campo `image`. Erros: `422` quando não há rost
 
 1. A imagem chega em bytes e **não é salva**.
 2. O **InsightFace** detecta o maior rosto e gera um vetor ArcFace de 512 dimensões, normalizado (L2).
-3. O banco escolhido em `target` devolve os K=5 vetores mais próximos por cosseno: `find_nearest` no **Firestore** ou `$vectorSearch` no **MongoDB**.
+3. O banco escolhido em `target` devolve os K=5 vetores mais próximos por cosseno: `find_nearest` no **Firestore** `$vectorSearch` no **MongoDB** ou cosseno vetorizado no **SQLite**.
 4. O **KnnClassifier** soma os votos de cada pessoa, ponderados pela similaridade.
 5. Se `precision ≥ threshold`, responde e grava o vetor novo no histórico; senão retorna `null`.
 
@@ -159,6 +160,21 @@ Na inicialização, o motor cria o índice `person_id` e, no modo `atlas`, o ín
 O `$vectorSearch` funciona no **MongoDB Atlas** e no **Community 8.2+ com mongot**. Num Mongo local sem busca vetorial, use `vector_search.mode: brute_force`: a similaridade é calculada em Python e serve só para desenvolvimento ou poucos dados.
 </details>
 
+### 🪶 No SQLite (local)
+
+Um único arquivo, sem servidor nem credencial:
+
+```sql
+boop_persons            (identification PK, created_at, updated_at, embedding_ids JSON ≤ 10)
+boop_embeddings_history (embedding_id PK, person_id FK ON DELETE CASCADE, vector BLOB float32, dimension, created_at)
+```
+
+- O FIFO roda dentro de uma transação (`BEGIN IMMEDIATE`). Remover a pessoa apaga os embeddings dela em cascata.
+- Modo WAL com `busy_timeout`, seguro para as requisições concorrentes do FastAPI.
+- `vector_search.mode`:
+  - `brute_force` (padrão): matriz numpy em memória e cosseno vetorizado; atende bem algumas dezenas de milhares de embeddings.
+  - `sqlite_vec`: extensão [sqlite-vec](https://github.com/asg017/sqlite-vec) (`pip install -e ".[sqlite-vec]"`), para bases maiores.
+
 ---
 
 ## 🏛️ Arquitetura
@@ -169,7 +185,7 @@ O `$vectorSearch` funciona no **MongoDB Atlas** e no **Community 8.2+ com mongot
 <tr><th>Camada</th><th>Pasta</th><th>Responsabilidade</th><th>Depende de</th></tr>
 <tr><td>🟢 Domain</td><td><code>domain/</code></td><td>Entidades, <code>Embedding</code>, <code>KnnClassifier</code>, regra FIFO</td><td>nada</td></tr>
 <tr><td>🔵 Application</td><td><code>application/</code></td><td>Casos de uso, portas (<code>Protocol</code>) e DTOs</td><td>Domain</td></tr>
-<tr><td>⚙️ Infrastructure</td><td><code>infrastructure/</code></td><td>InsightFace, Firestore, MongoDB, in-memory, IDs</td><td>Application, Domain</td></tr>
+<tr><td>⚙️ Infrastructure</td><td><code>infrastructure/</code></td><td>InsightFace, Firestore, MongoDB, SQLite, in-memory, IDs</td><td>Application, Domain</td></tr>
 <tr><td>🌐 Interfaces</td><td><code>interfaces/</code></td><td>FastAPI e CLI: só traduzem a entrada e a saída</td><td>Application</td></tr>
 <tr><td>🔌 Config</td><td><code>config/</code></td><td><code>config.yaml</code> → <code>Settings</code> e <code>container.py</code> (escolhe o banco pelo <code>target</code>)</td><td>todas</td></tr>
 </table>
@@ -187,12 +203,14 @@ cp .env.example .env      # só os segredos
 .venv/Scripts/booprecognition serve
 ```
 
+> 💻 **Rodar 100% local, sem nuvem:** `BOOP_TARGET=sqlite .venv/Scripts/booprecognition serve`. Os dados ficam em `./data/booprecognition.db` e continuam lá depois de reiniciar.
+
 ### ⚙️ Configuração: `config.yaml`
 
 Toda a configuração fica em [`config.yaml`](config.yaml), que pode ser trocado por outro arquivo com `BOOP_CONFIG=caminho.yaml`. A chave **`target`** escolhe o banco:
 
 ```yaml
-target: firestore            # firestore | mongodb | memory
+target: firestore            # firestore | mongodb | sqlite | memory
 project: booprecognition
 
 setup-alg:
@@ -221,12 +239,23 @@ databases:
       mode: atlas              # atlas | brute_force
       index_name: boop_vector_index
       num_candidates: 100
+
+  sqlite:
+    path: ./data/booprecognition.db
+    path_env: BOOP_SQLITE_PATH
+    tables:
+      persons: boop_persons
+      embeddings: boop_embeddings_history
+    vector_search:
+      mode: brute_force        # brute_force | sqlite_vec
+      dimension: 512
 ```
 
 <table>
 <tr><th><code>target</code></th><th>Implementação</th><th>Autenticação (variável de ambiente)</th></tr>
 <tr><td><code>firestore</code></td><td><code>FirestoreFaceRepository</code></td><td>a env nomeada em <code>credentials_env</code> aponta para a service account. Sem ela, usa as Application Default Credentials.</td></tr>
 <tr><td><code>mongodb</code></td><td><code>MongoFaceRepository</code></td><td>a env nomeada em <code>uri_env</code> guarda a connection string (com usuário e senha). É obrigatória.</td></tr>
+<tr><td><code>sqlite</code></td><td><code>SqliteFaceRepository</code></td><td>nenhuma: arquivo local em <code>path</code> (ou na env <code>path_env</code>)</td></tr>
 <tr><td><code>memory</code></td><td><code>InMemoryFaceRepository</code></td><td>nenhuma (desenvolvimento e testes)</td></tr>
 </table>
 
@@ -240,6 +269,7 @@ databases:
 | `GOOGLE_APPLICATION_CREDENTIALS` | Caminho da service account do Firebase |
 | `BOOP_MONGODB_URI` | Connection string do MongoDB |
 | `BOOP_CONFIG` | Caminho alternativo para o `config.yaml` |
+| `BOOP_SQLITE_PATH` | Caminho alternativo do arquivo SQLite |
 | `BOOP_TARGET` | Sobrescreve o `target` do YAML (por exemplo em deploy ou CI) |
 </details>
 

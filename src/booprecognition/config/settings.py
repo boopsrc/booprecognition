@@ -18,7 +18,7 @@ CONFIG_ENV = "BOOP_CONFIG"
 TARGET_ENV = "BOOP_TARGET"
 DEFAULT_CONFIG_PATH = Path("config.yaml")
 
-Target = Literal["firestore", "mongodb", "memory"]
+Target = Literal["firestore", "mongodb", "sqlite", "memory"]
 
 
 class _Model(BaseModel):
@@ -58,9 +58,27 @@ class MongoConfig(_Model):
     vector_search: MongoVectorSearchConfig = MongoVectorSearchConfig()
 
 
+class SqliteTablesConfig(_Model):
+    persons: str = Field(default="boop_persons", pattern=r"^[A-Za-z_][A-Za-z0-9_-]*$")
+    embeddings: str = Field(default="boop_embeddings_history", pattern=r"^[A-Za-z_][A-Za-z0-9_-]*$")
+
+
+class SqliteVectorSearchConfig(_Model):
+    mode: Literal["brute_force", "sqlite_vec"] = "brute_force"
+    dimension: int = Field(default=512, ge=1)  # usado pela tabela vec0 do sqlite-vec
+
+
+class SqliteConfig(_Model):
+    path: str = "./data/booprecognition.db"
+    path_env: str = "BOOP_SQLITE_PATH"  # sobrescreve `path` quando definida
+    tables: SqliteTablesConfig = SqliteTablesConfig()
+    vector_search: SqliteVectorSearchConfig = SqliteVectorSearchConfig()
+
+
 class DatabasesConfig(_Model):
     firestore: FirestoreConfig = FirestoreConfig()
     mongodb: MongoConfig = MongoConfig()
+    sqlite: SqliteConfig = SqliteConfig()
 
 
 class Settings(_Model):

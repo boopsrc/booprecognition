@@ -1,6 +1,6 @@
 # Configuração do motor booprecognition.
 
-# Banco usado pelo motor: firestore | mongodb | memory
+# Banco usado pelo motor: firestore | mongodb | sqlite | memory
 target: firestore
 project: booprecognition
 
@@ -30,3 +30,13 @@ databases:
       mode: atlas               # atlas ($vectorSearch) | brute_force (cosseno em Python, dev)
       index_name: boop_vector_index
       num_candidates: 100       # candidatos avaliados pelo HNSW antes do top-K
+
+  sqlite:
+    path: ./data/booprecognition.db   # arquivo local; a pasta é criada automaticamente
+    path_env: BOOP_SQLITE_PATH        # se definida, sobrescreve o path
+    tables:
+      persons: boop_persons
+      embeddings: boop_embeddings_history
+    vector_search:
+      mode: brute_force               # brute_force (numpy em memória) | sqlite_vec (extensão)
+      dimension: 512
