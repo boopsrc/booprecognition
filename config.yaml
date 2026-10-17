@@ -7,6 +7,8 @@ project: booprecognition
 setup-alg:
   knn_k: 5                    # vizinhos consultados na busca KNN
   match_threshold: 0.5        # precision mínima para reconhecer a pessoa
+  min_neighbor_similarity: 0.3  # vizinhos abaixo disso são outra pessoa e não votam
+  duplicate_threshold: 0.45   # cadastro: similaridade a partir da qual é a mesma pessoa
   max_embeddings_person: 10   # tamanho do histórico FIFO por pessoa
   encoder_model: buffalo_l    # modelo InsightFace (ArcFace 512-d)
   id_digits: 9                # dígitos do identificador aleatório
@@ -48,7 +50,7 @@ auth:
   algorithm: HS256
   issuer: booprecognition
   audience: booprecognition-api
-  access_token_ttl_seconds: 3600
+  access_token_ttl_seconds: 0         # 0 = token não expira
   clients:
     - client_id: boop-admin
       secret_env: BOOP_CLIENT_ADMIN_SECRET

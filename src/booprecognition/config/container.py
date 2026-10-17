@@ -37,10 +37,14 @@ def build_container(
     index: EmbeddingIndex = repo
 
     ids, clock = RandomIdGenerator(alg.id_digits), SystemClock()
-    matcher = FaceMatcher(encoder, index, KnnClassifier(k=alg.knn_k, threshold=alg.match_threshold))
+    matcher = FaceMatcher(encoder, index, KnnClassifier(
+        k=alg.knn_k, threshold=alg.match_threshold, min_similarity=alg.min_neighbor_similarity
+    ))
     return Container(
         identify_person=IdentifyPerson(matcher, persons, ids, clock, alg.max_embeddings_person),
-        register_person=RegisterPerson(matcher, persons, ids, clock),
+        register_person=RegisterPerson(
+            matcher, persons, ids, clock, duplicate_threshold=alg.duplicate_threshold
+        ),
         remove_person=RemovePerson(persons),
     )
 

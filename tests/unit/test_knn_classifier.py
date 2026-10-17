@@ -27,3 +27,17 @@ def test_below_threshold_returns_none() -> None:
 def test_only_k_nearest_are_considered() -> None:
     result = KnnClassifier(k=1, threshold=0.5).classify([n(1, 10, 0.6), n(2, 20, 0.95)])
     assert result is not None and result.identification == 20 and result.history == (2,)
+
+
+def test_single_embedding_person_not_diluted_by_strangers() -> None:
+    # Pessoa recém-cadastrada (1 embedding) cercada de vizinhos de outras pessoas
+    neighbors = [n(1, 10, 0.62), n(2, 20, 0.12), n(3, 30, 0.08), n(4, 40, 0.05), n(5, 50, 0.02)]
+    result = KnnClassifier(k=5, threshold=0.5).classify(neighbors)
+    assert result is not None and result.identification == 10
+
+
+def test_register_duplicate_guard_uses_closest_neighbor() -> None:
+    from booprecognition.application.use_cases.face_matcher import MatchAttempt
+
+    attempt = MatchAttempt(None, None, [n(1, 10, 0.31), n(2, 20, 0.5)])  # type: ignore[arg-type]
+    assert attempt.closest is not None and attempt.closest.person_id == 20

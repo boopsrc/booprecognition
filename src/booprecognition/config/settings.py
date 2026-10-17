@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 CONFIG_ENV = "BOOP_CONFIG"
 TARGET_ENV = "BOOP_TARGET"
@@ -33,6 +33,10 @@ class CollectionsConfig(_Model):
 class AlgorithmConfig(_Model):
     knn_k: int = Field(default=5, ge=1, le=1000)
     match_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    # Vizinhos abaixo disso são considerados outra pessoa e não votam no KNN
+    min_neighbor_similarity: float = Field(default=0.3, ge=0.0, le=1.0)
+    # Cadastro: similaridade com um rosto existente a partir da qual é a mesma pessoa
+    duplicate_threshold: float = Field(default=0.45, ge=0.0, le=1.0)
     max_embeddings_person: int = Field(default=10, ge=1)
     encoder_model: str = "buffalo_l"
     id_digits: int = Field(default=9, ge=6, le=18)
@@ -97,8 +101,16 @@ class AuthConfig(_Model):
     algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
     issuer: str = "booprecognition"
     audience: str = "booprecognition-api"
-    access_token_ttl_seconds: int = Field(default=3600, ge=60, le=86400)
+    # 0 = token sem expiração (sem claim `exp`)
+    access_token_ttl_seconds: int = Field(default=3600, ge=0, le=86400)
     clients: list[OAuthClientConfig] = Field(default_factory=list)
+
+    @field_validator("access_token_ttl_seconds")
+    @classmethod
+    def _ttl_zero_or_min(cls, value: int) -> int:
+        if 0 < value < 60:
+            raise ValueError("access_token_ttl_seconds deve ser 0 (sem expiração) ou >= 60")
+        return value
 
 
 class Settings(_Model):

@@ -140,3 +140,15 @@ def test_auth_disabled() -> None:
     c = TestClient(create_app(container, AuthConfig(enabled=False)))
     assert c.post("/identify", files=upload(b"A1")).status_code == 200
     assert c.post("/oauth/token", data={"grant_type": "client_credentials"}).status_code == 404
+
+
+
+def test_token_without_expiration_when_ttl_zero() -> None:
+    import jwt
+
+    tokens = make_tokens(ttl=0)
+    body = tokens.issue("admin", "s3cret", None)
+    assert "expires_in" not in body
+    claims = jwt.decode(body["access_token"], options={"verify_signature": False})
+    assert "exp" not in claims
+    assert tokens.verify(body["access_token"]).client_id == "admin"

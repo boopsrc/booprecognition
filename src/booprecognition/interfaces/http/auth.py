@@ -53,6 +53,10 @@ class TokenService:
         self._config = config
         self._key = signing_key
         self._clients = {c.client_id: c for c in clients}
+        # Com TTL 0 os tokens não têm `exp`; se houver `exp`, ele continua sendo validado.
+        self._required_claims = ["iat", "sub", "aud", "iss"]
+        if config.access_token_ttl_seconds:
+            self._required_claims.append("exp")
 
     @classmethod
     def from_config(cls, config: AuthConfig) -> TokenService:
@@ -86,17 +90,16 @@ class TokenService:
             "sub": client.client_id,
             "iat": now,
             "nbf": now,
-            "exp": now + ttl,
             "jti": uuid.uuid4().hex,
             "scope": " ".join(sorted(requested)),
         }
+        if ttl:
+            claims["exp"] = now + ttl
         token = jwt.encode(claims, self._key, algorithm=self._config.algorithm)
-        return {
-            "access_token": token,
-            "token_type": "Bearer",
-            "expires_in": ttl,
-            "scope": claims["scope"],
-        }
+        response = {"access_token": token, "token_type": "Bearer", "scope": claims["scope"]}
+        if ttl:
+            response["expires_in"] = ttl
+        return response
 
     def verify(self, token: str) -> TokenClaims:
         claims = jwt.decode(
@@ -105,7 +108,7 @@ class TokenService:
             algorithms=[self._config.algorithm],  # fixo: impede "alg: none"/troca de algoritmo
             audience=self._config.audience,
             issuer=self._config.issuer,
-            options={"require": ["exp", "iat", "sub", "aud", "iss"]},
+            options={"require": self._required_claims},
         )
         return TokenClaims(claims["sub"], frozenset(str(claims.get("scope", "")).split()))
 
