@@ -81,11 +81,32 @@ class DatabasesConfig(_Model):
     sqlite: SqliteConfig = SqliteConfig()
 
 
+Scope = Literal["identify", "persons:write", "persons:delete"]
+ALL_SCOPES: tuple[Scope, ...] = ("identify", "persons:write", "persons:delete")
+
+
+class OAuthClientConfig(_Model):
+    client_id: str = Field(min_length=1)
+    secret_env: str  # nome da env com o client_secret
+    scopes: list[Scope] = Field(default_factory=lambda: list(ALL_SCOPES))
+
+
+class AuthConfig(_Model):
+    enabled: bool = True
+    secret_env: str = "BOOP_JWT_SECRET"  # chave de assinatura HS256 (>= 32 bytes)
+    algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
+    issuer: str = "booprecognition"
+    audience: str = "booprecognition-api"
+    access_token_ttl_seconds: int = Field(default=3600, ge=60, le=86400)
+    clients: list[OAuthClientConfig] = Field(default_factory=list)
+
+
 class Settings(_Model):
     target: Target = "firestore"
     project: str = "booprecognition"
     setup_alg: AlgorithmConfig = Field(default_factory=AlgorithmConfig, alias="setup-alg")
     databases: DatabasesConfig = DatabasesConfig()
+    auth: AuthConfig = AuthConfig()
 
 
 def load_settings(path: str | Path | None = None) -> Settings:

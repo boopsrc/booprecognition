@@ -73,7 +73,7 @@ Modelo, banco e framework ficam atrás de **portas**. Trocar qualquer um deles e
 <td>➕ <b>Cadastrar</b></td>
 <td><code>POST /persons</code></td>
 <td><code>booprecognition register foto.jpg</code></td>
-<td>Verifica antes se a pessoa existe. Se existir, devolve <code>200</code> com <code>created: false</code>; senão cria e devolve <code>201</code>.</td>
+<td>Verifica antes se a pessoa existe. Se existir, devolve <code>200</code> com <code>created: false</code>; senão cria e devolve <code>201</code> com o header <code>Location</code>. Nos dois casos o corpo traz o <code>id</code> da pessoa.</td>
 </tr>
 <tr>
 <td>🗑️ <b>Remover</b></td>
@@ -84,6 +84,31 @@ Modelo, banco e framework ficam atrás de **portas**. Trocar qualquer um deles e
 </table>
 
 Os uploads usam multipart com o campo `image`. Erros: `422` quando não há rosto ou a imagem é inválida, `404` quando a pessoa não existe.
+
+---
+
+## 🔑 Autenticação (OAuth 2.0 + JWT)
+
+Todas as rotas HTTP exigem um **access token JWT** obtido pelo grant OAuth 2.0 `client_credentials` em `POST /oauth/token`.
+
+```bash
+# 1. Pegar o token (credenciais via Basic auth ou nos campos client_id/client_secret)
+curl -u boop-admin:$BOOP_CLIENT_ADMIN_SECRET -d grant_type=client_credentials http://localhost:8000/oauth/token
+# {"access_token":"eyJ...","token_type":"Bearer","expires_in":3600,"scope":"identify persons:delete persons:write"}
+
+# 2. Usar o token
+curl -H "Authorization: Bearer eyJ..." -F image=@foto.jpg http://localhost:8000/identify
+```
+
+| Escopo | Rota |
+|---|---|
+| `identify` | `POST /identify` |
+| `persons:write` | `POST /persons` |
+| `persons:delete` | `DELETE /persons/{id}` |
+
+Todos os exemplos de `curl` estão em [`docs/api-curl.md`](docs/api-curl.md). Peça só parte dos escopos com `scope=identify`. Respostas: `401` para token ausente, inválido ou expirado; `403` para escopo insuficiente. Os erros do `/oauth/token` seguem o RFC 6749 (`invalid_client`, `invalid_scope`, `unsupported_grant_type`).
+
+Os clientes ficam em `auth.clients` no `config.yaml`. O `client_secret` de cada um e a chave de assinatura (`BOOP_JWT_SECRET`, mínimo 32 bytes) vêm de variáveis de ambiente. Para desenvolvimento local, `auth.enabled: false` desliga a autenticação.
 
 ---
 
@@ -270,6 +295,8 @@ databases:
 | `BOOP_MONGODB_URI` | Connection string do MongoDB |
 | `BOOP_CONFIG` | Caminho alternativo para o `config.yaml` |
 | `BOOP_SQLITE_PATH` | Caminho alternativo do arquivo SQLite |
+| `BOOP_JWT_SECRET` | Chave de assinatura dos tokens JWT (≥ 32 bytes) |
+| `BOOP_CLIENT_ADMIN_SECRET` | `client_secret` do cliente `boop-admin` (nome em `auth.clients[].secret_env`) |
 | `BOOP_TARGET` | Sobrescreve o `target` do YAML (por exemplo em deploy ou CI) |
 </details>
 

@@ -32,7 +32,8 @@ class RegisterOutput:
     created: bool  # False quando a pessoa já existia
 
     def to_dict(self) -> dict[str, Any]:
-        return {**self.person.to_dict(), "created": self.created}
+        # `id` repete `identification` para quem só precisa persistir a referência
+        return {"id": self.person.identification, **self.person.to_dict(), "created": self.created}
 
 
 @dataclass(frozen=True, slots=True)

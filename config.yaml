@@ -40,3 +40,16 @@ databases:
     vector_search:
       mode: brute_force               # brute_force (numpy em memória) | sqlite_vec (extensão)
       dimension: 512
+
+# OAuth 2.0 (client_credentials) com access token JWT
+auth:
+  enabled: true
+  secret_env: BOOP_JWT_SECRET         # chave de assinatura (>= 32 bytes)
+  algorithm: HS256
+  issuer: booprecognition
+  audience: booprecognition-api
+  access_token_ttl_seconds: 3600
+  clients:
+    - client_id: boop-admin
+      secret_env: BOOP_CLIENT_ADMIN_SECRET
+      scopes: [identify, persons:write, persons:delete]
