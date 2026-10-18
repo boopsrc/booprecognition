@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reconhecimento Facial booprecognition</title>
+<style>
+:root{
+  --bg:#f7f7fb;--surface:#fff;--text:#1d1d27;--muted:#5d5d70;--line:#e2e2ea;
+  --accent:#6d28d9;--accent-soft:#ede9fe;--ok:#047857;--ok-soft:#d1fae5;--warn:#b45309;--warn-soft:#fef3c7;
+  --code:#f1f1f6;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111118;--surface:#1a1a24;--text:#ececf3;--muted:#a3a3b8;--line:#2c2c3a;
+  --accent:#a78bfa;--accent-soft:#2a2245;--ok:#34d399;--ok-soft:#10342a;--warn:#fbbf24;--warn-soft:#3a2d0f;--code:#22222e;}}
+:root[data-theme="dark"]{
+  --bg:#111118;--surface:#1a1a24;--text:#ececf3;--muted:#a3a3b8;--line:#2c2c3a;
+  --accent:#a78bfa;--accent-soft:#2a2245;--ok:#34d399;--ok-soft:#10342a;--warn:#fbbf24;--warn-soft:#3a2d0f;--code:#22222e;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:960px;margin:0 auto;padding:0 16px}
+header{padding:56px 0 32px;border-bottom:1px solid var(--line)}
+header h1{font-size:clamp(28px,5vw,40px);margin:0 0 8px;line-height:1.15}
+header p{color:var(--muted);margin:0;max-width:640px}
+nav{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);z-index:2}
+nav .wrap{display:flex;gap:18px;overflow-x:auto;padding-top:12px;padding-bottom:12px;font-size:14px}
+nav a{color:var(--muted);text-decoration:none;white-space:nowrap}
+nav a:hover{color:var(--accent)}
+section{padding:40px 0;border-bottom:1px solid var(--line)}
+h2{font-size:24px;margin:0 0 16px}
+h3{font-size:17px;margin:0 0 6px}
+p{margin:0 0 12px}
+.muted{color:var(--muted)}
+code{background:var(--code);padding:1px 6px;border-radius:4px;font-size:.9em;font-family:ui-monospace,Consolas,monospace}
+pre{background:var(--code);padding:14px 16px;border-radius:8px;overflow-x:auto;font-size:14px;margin:0 0 12px}
+pre code{background:none;padding:0}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 4px}
+.flow span{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:14px}
+.flow i{color:var(--muted);font-style:normal}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px}
+.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);margin-bottom:8px}
+.steps{list-style:none;padding:0;margin:0;counter-reset:s}
+.steps>li{counter-increment:s;position:relative;padding:0 0 28px 56px}
+.steps>li::before{content:counter(s);position:absolute;left:0;top:0;width:36px;height:36px;border-radius:50%;background:var(--accent);color:var(--surface);display:grid;place-items:center;font-weight:600}
+.steps>li::after{content:"";position:absolute;left:17px;top:40px;bottom:4px;width:2px;background:var(--line)}
+.steps>li:last-child::after{display:none}
+.steps ul,.steps ol{margin:4px 0 8px;padding-left:20px}
+table{width:100%;border-collapse:collapse;font-size:14px;background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--code);font-weight:600}
+tr:last-child td{border-bottom:none}
+.table-wrap{overflow-x:auto;margin:0 0 12px}
+.note{border-left:4px solid var(--warn);background:var(--warn-soft);padding:12px 16px;border-radius:0 8px 8px 0;margin:12px 0}
+.good{border-left-color:var(--ok);background:var(--ok-soft)}
+svg text{fill:var(--text);font:13px system-ui,sans-serif}
+.diagram{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;margin:12px 0}
+footer{padding:32px 0 56px;color:var(--muted);font-size:14px}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <span class="tag">booprecognition</span>
+  <h1>Como o reconhecimento facial funciona</h1>
+  <p>Da foto recebida pela API até a resposta com <code>identification</code>, <code>precision</code> e <code>history</code>: cada etapa, os modelos usados e os parâmetros que controlam a decisão.</p>
+</div></header>
+
+<nav><div class="wrap">
+  <a href="#visao">Visão geral</a><a href="#modelos">Modelos</a><a href="#passos">Passo a passo</a>
+  <a href="#embedding">Embedding</a><a href="#decisao">Decisão</a><a href="#parametros">Parâmetros</a><a href="#limites">Limitações</a>
+</div></nav>
+
+<main class="wrap">
+
+<section id="visao">
+  <h2>Visão geral</h2>
+  <div class="flow">
+    <span>Foto</span><i>→</i><span>Decodificar</span><i>→</i><span>Detectar (SCRFD)</span><i>→</i><span>Qualidade</span><i>→</i>
+    <span>Alinhar 112×112</span><i>→</i><span>Embedding (ArcFace)</span><i>→</i><span>KNN no banco</span><i>→</i><span>Votação + travas</span><i>→</i><span>Resposta</span>
+  </div>
+  <div class="note good"><strong>Sem imagens no banco.</strong> A foto é descartada logo depois do processamento; só o vetor numérico do rosto é salvo.</div>
+</section>
+
+<section id="modelos">
+  <h2>Modelos usados</h2>
+  <p class="muted">Todos do InsightFace, executados com ONNX Runtime (CPU por padrão).</p>
+  <div class="grid">
+    <div class="card"><span class="tag">Detecção</span><h3>SCRFD-10G</h3>
+      <p>Arquivo <code>det_10g.onnx</code>. Encontra os rostos e devolve a caixa, a confiança (<code>det_score</code>) e 5 pontos: olhos, nariz e cantos da boca.</p></div>
+    <div class="card"><span class="tag">Reconhecimento · padrão</span><h3>buffalo_l — ArcFace R50</h3>
+      <p>Arquivo <code>w600k_r50.onnx</code>, treinado na WebFace600K. Gera um vetor de 512 números.</p></div>
+    <div class="card"><span class="tag">Reconhecimento · ensemble</span><h3>antelopev2 — ArcFace R100</h3>
+      <p>Arquivo <code>glintr100.onnx</code>, rede maior treinada na Glint360K. Combinado com o buffalo_l gera 1024 dimensões.</p></div>
+  </div>
+  <p style="margin-top:16px"><strong>Por que ArcFace?</strong> Ele é treinado com <em>additive angular margin loss</em>: vetores da mesma pessoa ficam com ângulo pequeno entre si e de pessoas diferentes ficam afastados. Por isso a comparação é pela <strong>similaridade de cosseno</strong> (1 = idêntico, perto de 0 = sem relação).</p>
+  <pre><code>setup-alg:
+  encoder_models: [buffalo_l]               # 512-d
+  # encoder_models: [buffalo_l, antelopev2] # ensemble, 1024-d</code></pre>
+</section>
+
+<section id="passos">
+  <h2>Passo a passo</h2>
+  <ol class="steps">
+    <li><h3>Decodificação e tamanho</h3>
+      <p>OpenCV lê os bytes já aplicando a orientação EXIF. Fotos com lado maior que <strong>1600 px</strong> são reduzidas; imagens com lado menor que <strong>320 px</strong> são ampliadas.</p></li>
+    <li><h3>Detecção com tentativas progressivas</h3>
+      <p>O detector para na primeira versão da imagem que tiver um rosto:</p>
+      <ol><li>original (confiança ≥ 0.5)</li><li>com borda de 25% (rosto em close)</li><li>contraste equalizado CLAHE (foto escura)</li><li>borda + contraste</li><li>ampliada 2x (rosto pequeno)</li><li>rotações 90°, 180°, 270° (EXIF errado)</li></ol>
+      <p class="muted">Da 2ª tentativa em diante a confiança mínima cai para 0.3. Fica o <strong>maior</strong> rosto com pelo menos 40 px.</p></li>
+    <li><h3>Filtro de qualidade</h3>
+      <p>Rostos ruins geram vetores genéricos que "parecem" com todo mundo, então são recusados com <code>LowQualityFaceError</code>:</p>
+      <ul><li><code>det_score &lt; 0.6</code>: borrado, parcial ou artificial;</li>
+      <li>perfil: deslocamento do nariz em relação ao centro dos olhos ÷ distância entre os olhos &gt; <code>0.45</code>.</li></ul></li>
+    <li><h3>Alinhamento</h3>
+      <p>Com os 5 pontos, <code>face_align.norm_crop</code> leva olhos, nariz e boca para posições fixas num recorte de <strong>112×112</strong>, o formato que o ArcFace espera.</p></li>
+    <li><h3>Embedding</h3><p>Veja o detalhe na <a href="#embedding">próxima seção</a>.</p></li>
+    <li><h3>Busca KNN</h3>
+      <p>O vetor vai para o índice vetorial do banco, que devolve os <code>knn_k</code> (5) embeddings mais parecidos.</p>
+      <div class="table-wrap"><table><tr><th>Banco</th><th>Busca</th></tr>
+        <tr><td>Firestore</td><td><code>find_nearest</code> (vector search nativo)</td></tr>
+        <tr><td>MongoDB</td><td><code>$vectorSearch</code> (Atlas, HNSW) ou força bruta</td></tr>
+        <tr><td>SQLite</td><td>numpy em memória ou <code>sqlite-vec</code></td></tr></table></div></li>
+    <li><h3>Votação e travas</h3><p>Veja <a href="#decisao">Decisão</a>.</p></li>
+    <li><h3>Resposta e aprendizado</h3>
+      <p><strong>Identificar:</strong> devolve a pessoa e só salva o rosto no histórico (FIFO de 10) se a similaridade for ≥ <code>0.65</code>, para um falso positivo não virar referência.</p>
+      <p><strong>Cadastrar:</strong> se o rosto já é reconhecido ou o vizinho mais próximo tem similaridade ≥ <code>0.45</code>, devolve a pessoa existente; senão cria um ID aleatório de 9 dígitos.</p>
+      <pre><code>{ "identification": 482913057, "precision": 0.87, "history": [213, 245, 345] }</code></pre></li>
+  </ol>
+</section>
+
+<section id="embedding">
+  <h2>Como o embedding é montado</h2>
+  <div class="diagram">
+    <svg viewBox="0 0 640 200" width="100%" role="img" aria-label="Rosto e rosto espelhado passam por cada modelo, são somados, normalizados e concatenados">
+      <g fill="none" stroke="currentColor" style="color:var(--line)" stroke-width="1.5">
+        <rect x="10" y="30" width="120" height="44" rx="8"/><rect x="10" y="126" width="120" height="44" rx="8"/>
+        <rect x="190" y="30" width="140" height="44" rx="8"/><rect x="190" y="126" width="140" height="44" rx="8"/>
+        <rect x="390" y="78" width="110" height="44" rx="8"/><rect x="540" y="78" width="90" height="44" rx="8"/>
+      </g>
+      <g stroke="var(--accent)" stroke-width="1.5" fill="none">
+        <path d="M130 52H190M130 148H190M130 52L190 148M130 148L190 52"/>
+        <path d="M330 52L390 100M330 148L390 100M500 100H540"/>
+      </g>
+      <text x="70" y="57" text-anchor="middle">rosto 112×112</text>
+      <text x="70" y="153" text-anchor="middle">espelhado</text>
+      <text x="260" y="57" text-anchor="middle">buffalo_l · soma</text>
+      <text x="260" y="153" text-anchor="middle">antelopev2 · soma</text>
+      <text x="445" y="97" text-anchor="middle">L2 × 1/√N</text>
+      <text x="445" y="113" text-anchor="middle">concatena</text>
+      <text x="585" y="105" text-anchor="middle">vetor</text>
+    </svg>
+  </div>
+  <ol>
+    <li>Para cada modelo, calcula o vetor do recorte <strong>e do recorte espelhado</strong> e soma os dois (test-time augmentation).</li>
+    <li>Normaliza (norma L2 = 1) e multiplica por <code>1/√N</code>, onde N é o número de modelos.</li>
+    <li>Concatena. Assim o cosseno final é exatamente a <strong>média dos cossenos</strong> de cada modelo: o rosto só passa se os modelos concordarem.</li>
+  </ol>
+</section>
+
+<section id="decisao">
+  <h2>Decisão: votação KNN e travas</h2>
+  <ol class="steps">
+    <li><h3>Filtrar</h3><p>Vizinhos com similaridade &lt; <code>min_neighbor_similarity</code> (0.4) não votam.</p></li>
+    <li><h3>Votar</h3><p>Agrupa por pessoa; vence quem tiver a maior <strong>soma</strong> de similaridades.</p></li>
+    <li><h3>Precision</h3><pre><code>precision = média(similaridades do vencedor) × votos do vencedor / votos válidos</code></pre><p>Rejeita se &lt; <code>match_threshold</code> (0.5).</p></li>
+    <li><h3>Trava do melhor vizinho</h3><p>O vizinho mais próximo do vencedor precisa ter ≥ <code>min_top_similarity</code> (0.55). Vários rostos "mais ou menos" parecidos não somam um reconhecimento.</p></li>
+    <li><h3>Trava de margem</h3><p>O vencedor precisa superar a 2ª pessoa por ≥ <code>min_margin</code> (0.08). Se estiver empatado, a resposta é "não reconhecido".</p></li>
+  </ol>
+  <div class="note">Essas travas existem para casos como avatares e personagens de jogo (ex.: Aion), cujos rostos renderizados ficam parecidos entre si e com pessoas reais.</div>
+</section>
+
+<section id="parametros">
+  <h2>Parâmetros (<code>setup-alg</code>)</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Parâmetro</th><th>Padrão</th><th>Efeito</th></tr>
+    <tr><td><code>knn_k</code></td><td>5</td><td>vizinhos consultados</td></tr>
+    <tr><td><code>min_neighbor_similarity</code></td><td>0.4</td><td>abaixo disso o vizinho não vota</td></tr>
+    <tr><td><code>match_threshold</code></td><td>0.5</td><td>precision mínima</td></tr>
+    <tr><td><code>min_top_similarity</code></td><td>0.55</td><td>melhor vizinho do vencedor</td></tr>
+    <tr><td><code>min_margin</code></td><td>0.08</td><td>distância para a 2ª pessoa</td></tr>
+    <tr><td><code>update_threshold</code></td><td>0.65</td><td>mínimo para salvar no histórico</td></tr>
+    <tr><td><code>duplicate_threshold</code></td><td>0.45</td><td>trava de cadastro duplicado</td></tr>
+    <tr><td><code>max_embeddings_person</code></td><td>10</td><td>tamanho do histórico FIFO</td></tr>
+    <tr><td><code>encoder_models</code></td><td>[buffalo_l]</td><td>modelos do ensemble</td></tr>
+    <tr><td><code>min_det_score</code></td><td>0.6</td><td>qualidade mínima da detecção</td></tr>
+    <tr><td><code>max_yaw_ratio</code></td><td>0.45</td><td>limite de rosto de perfil</td></tr>
+  </table></div>
+  <div class="grid">
+    <div class="card"><h3>Muitos falsos positivos?</h3><p>Suba <code>min_top_similarity</code> para ~0.6, aumente <code>min_margin</code> ou ligue o ensemble.</p></div>
+    <div class="card"><h3>Pessoa real não reconhecida?</h3><p>Cadastre mais fotos dela ou desça <code>min_top_similarity</code> com cuidado.</p></div>
+  </div>
+  <div class="note">Trocar <code>encoder_models</code> muda a dimensão (512 × N). Ajuste <code>sqlite.vector_search.dimension</code>, recrie o índice vetorial do Mongo/Firestore e recadastre as pessoas: vetores de modelos diferentes não são comparáveis.</div>
+</section>
+
+<section id="limites">
+  <h2>Limitações</h2>
+  <ul>
+    <li>Não há anti-spoofing: foto de foto ou render 3D muito realista não é barrado por um modelo dedicado, só pelas travas de similaridade.</li>
+    <li>Os limites padrão são um ponto de partida; calibre com fotos reais do seu uso.</li>
+  </ul>
+</section>
+</main>
+
+<footer><div class="wrap">booprecognition · versão em texto: <a href="reconhecimento-facial.md">reconhecimento-facial.md</a></div></footer>
+</body>
+</html>

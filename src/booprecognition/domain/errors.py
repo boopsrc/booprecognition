@@ -9,6 +9,10 @@ class NoFaceDetectedError(DomainError):
     """Nenhum rosto foi encontrado na imagem."""
 
 
+class LowQualityFaceError(NoFaceDetectedError):
+    """Rosto encontrado, mas sem qualidade para reconhecimento (borrado, de perfil)."""
+
+
 class InvalidImageError(DomainError):
     """Os bytes recebidos não representam uma imagem válida."""
 

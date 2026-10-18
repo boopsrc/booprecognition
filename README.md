@@ -242,7 +242,10 @@ setup-alg:
   knn_k: 5
   match_threshold: 0.5
   max_embeddings_person: 10
-  encoder_model: buffalo_l
+  min_top_similarity: 0.55
+  min_margin: 0.08
+  update_threshold: 0.65
+  encoder_models: [buffalo_l]   # ensemble: [buffalo_l, antelopev2]
   id_digits: 9
 
 databases:

@@ -38,10 +38,17 @@ def build_container(
 
     ids, clock = RandomIdGenerator(alg.id_digits), SystemClock()
     matcher = FaceMatcher(encoder, index, KnnClassifier(
-        k=alg.knn_k, threshold=alg.match_threshold, min_similarity=alg.min_neighbor_similarity
+        k=alg.knn_k,
+        threshold=alg.match_threshold,
+        min_similarity=alg.min_neighbor_similarity,
+        min_top_similarity=alg.min_top_similarity,
+        min_margin=alg.min_margin,
     ))
     return Container(
-        identify_person=IdentifyPerson(matcher, persons, ids, clock, alg.max_embeddings_person),
+        identify_person=IdentifyPerson(
+            matcher, persons, ids, clock, alg.max_embeddings_person,
+            update_threshold=alg.update_threshold,
+        ),
         register_person=RegisterPerson(
             matcher, persons, ids, clock, duplicate_threshold=alg.duplicate_threshold
         ),
@@ -63,7 +70,12 @@ def build_repository(settings: Settings) -> Any:
 def _build_encoder(settings: Settings) -> FaceEncoder:
     from booprecognition.infrastructure.encoders.insightface_encoder import InsightFaceEncoder
 
-    return InsightFaceEncoder(model_name=settings.setup_alg.encoder_model)
+    alg = settings.setup_alg
+    return InsightFaceEncoder(
+        model_names=alg.encoder_models,
+        min_det_score=alg.min_det_score,
+        max_yaw_ratio=alg.max_yaw_ratio,
+    )
 
 
 def _build_memory(_: Settings) -> Any:

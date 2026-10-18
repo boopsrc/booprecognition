@@ -41,3 +41,17 @@ def test_register_duplicate_guard_uses_closest_neighbor() -> None:
 
     attempt = MatchAttempt(None, None, [n(1, 10, 0.31), n(2, 20, 0.5)])  # type: ignore[arg-type]
     assert attempt.closest is not None and attempt.closest.person_id == 20
+
+
+def test_weak_top_similarity_is_rejected() -> None:
+    # Avatar parecido: vários votos medianos, nenhum vizinho realmente próximo
+    neighbors = [n(1, 10, 0.52), n(2, 10, 0.51), n(3, 10, 0.5)]
+    classifier = KnnClassifier(k=5, threshold=0.5, min_top_similarity=0.55)
+    assert classifier.classify(neighbors) is None
+
+
+def test_ambiguous_between_two_people_is_rejected() -> None:
+    neighbors = [n(1, 10, 0.70), n(2, 20, 0.66)]
+    classifier = KnnClassifier(k=5, threshold=0.3, min_margin=0.08)
+    assert classifier.classify(neighbors) is None
+    assert KnnClassifier(k=5, threshold=0.3, min_margin=0.02).classify(neighbors) is not None

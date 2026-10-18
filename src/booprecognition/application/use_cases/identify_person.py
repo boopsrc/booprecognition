@@ -16,7 +16,9 @@ class IdentifyPerson:
         ids: IdGenerator,
         clock: Clock,
         max_embeddings: int,
+        update_threshold: float = 0.0,
     ) -> None:
+        self._update_threshold = update_threshold
         self._matcher = matcher
         self._persons = persons
         self._ids = ids
@@ -31,6 +33,15 @@ class IdentifyPerson:
         person = self._persons.get(attempt.result.identification)
         if person is None:  # índice desatualizado em relação às pessoas
             return None
+
+        # Só aprende com rostos muito parecidos: um falso positivo aceito no
+        # limite não pode virar referência e puxar outros rostos para a pessoa.
+        top = max(
+            (n.similarity for n in attempt.neighbors if n.person_id == person.identification),
+            default=0.0,
+        )
+        if top < self._update_threshold:
+            return RecognitionOutput.from_result(attempt.result)
 
         now = self._clock.now()
         embedding = FaceEmbedding(self._ids.new_id(), person.identification, attempt.embedding, now)

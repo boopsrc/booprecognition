@@ -7,10 +7,15 @@ project: booprecognition
 setup-alg:
   knn_k: 5                    # vizinhos consultados na busca KNN
   match_threshold: 0.5        # precision mínima para reconhecer a pessoa
-  min_neighbor_similarity: 0.3  # vizinhos abaixo disso são outra pessoa e não votam
+  min_top_similarity: 0.55    # o vizinho mais próximo do vencedor precisa ser ao menos isso
+  min_margin: 0.08            # vencedor precisa superar a 2ª pessoa por essa diferença
+  update_threshold: 0.65      # identificação só salva o rosto no histórico acima disso
+  min_neighbor_similarity: 0.4  # vizinhos abaixo disso são outra pessoa e não votam
   duplicate_threshold: 0.45   # cadastro: similaridade a partir da qual é a mesma pessoa
   max_embeddings_person: 10   # tamanho do histórico FIFO por pessoa
-  encoder_model: buffalo_l    # modelo InsightFace (ArcFace 512-d)
+  encoder_models: [buffalo_l] # InsightFace; ensemble: [buffalo_l, antelopev2] (1024-d)
+  min_det_score: 0.6          # recusa rostos borrados/artificiais
+  max_yaw_ratio: 0.45         # recusa rostos muito de perfil
   id_digits: 9                # dígitos do identificador aleatório
 
 databases:

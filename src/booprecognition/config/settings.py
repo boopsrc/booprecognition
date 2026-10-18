@@ -34,11 +34,21 @@ class AlgorithmConfig(_Model):
     knn_k: int = Field(default=5, ge=1, le=1000)
     match_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
     # Vizinhos abaixo disso são considerados outra pessoa e não votam no KNN
-    min_neighbor_similarity: float = Field(default=0.3, ge=0.0, le=1.0)
+    min_neighbor_similarity: float = Field(default=0.4, ge=0.0, le=1.0)
+    # O vizinho mais próximo do vencedor precisa ter ao menos essa similaridade
+    min_top_similarity: float = Field(default=0.55, ge=0.0, le=1.0)
+    # Diferença mínima entre o vencedor e a segunda pessoa mais parecida
+    min_margin: float = Field(default=0.08, ge=0.0, le=1.0)
+    # Identificação só realimenta o histórico com rostos muito parecidos, para
+    # que um falso positivo não "contamine" a pessoa com vetores de outra
+    update_threshold: float = Field(default=0.65, ge=0.0, le=1.0)
     # Cadastro: similaridade com um rosto existente a partir da qual é a mesma pessoa
     duplicate_threshold: float = Field(default=0.45, ge=0.0, le=1.0)
     max_embeddings_person: int = Field(default=10, ge=1)
-    encoder_model: str = "buffalo_l"
+    # Modelos InsightFace; mais de um = ensemble (dimensão 512 × N)
+    encoder_models: list[str] = Field(default_factory=lambda: ["buffalo_l"], min_length=1)
+    min_det_score: float = Field(default=0.6, ge=0.0, le=1.0)  # rostos borrados/artificiais
+    max_yaw_ratio: float = Field(default=0.45, ge=0.0)  # rosto muito de perfil
     id_digits: int = Field(default=9, ge=6, le=18)
 
 
