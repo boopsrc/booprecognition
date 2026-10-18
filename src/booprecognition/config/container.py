@@ -43,7 +43,8 @@ def build_container(
         min_similarity=alg.min_neighbor_similarity,
         min_top_similarity=alg.min_top_similarity,
         min_margin=alg.min_margin,
-    ))
+        margin_search_k=alg.margin_search_k,
+    ), model_parts=len(alg.encoder_models), min_model_agreement=alg.min_model_agreement)
     return Container(
         identify_person=IdentifyPerson(
             matcher, persons, ids, clock, alg.max_embeddings_person,
@@ -125,7 +126,7 @@ def _build_mongodb(settings: Settings) -> Any:
         num_candidates=cfg.vector_search.num_candidates,
         use_transactions=cfg.use_transactions,
     )
-    repo.ensure_indexes()
+    repo.ensure_indexes(dimension=settings.setup_alg.embedding_dimension)
     return repo
 
 

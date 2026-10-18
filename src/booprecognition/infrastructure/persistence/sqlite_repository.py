@@ -37,7 +37,7 @@ class SqliteFaceRepository:
         persons_table: str = "boop_persons",
         embeddings_table: str = "boop_embeddings_history",
         search_mode: SearchMode = "brute_force",
-        dimension: int = 512,
+        dimension: int = 1024,
     ) -> None:
         if str(path) != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -160,17 +160,29 @@ class SqliteFaceRepository:
         query = np.asarray(vector.values, dtype=np.float32)
         similarities = matrix @ query  # vetores já normalizados: produto = cosseno
         top = np.argsort(-similarities)[:k]
-        return [Neighbor(int(ids[i]), int(persons[i]), float(similarities[i])) for i in top]
+        return [
+            Neighbor(
+                int(ids[i]), int(persons[i]), float(similarities[i]),
+                Embedding.from_iterable(matrix[i].tolist()),
+            )
+            for i in top
+        ]
 
     def _nearest_sqlite_vec(self, vector: Embedding, k: int) -> Sequence[Neighbor]:
         with self._lock:
             rows = self._conn.execute(
-                f"SELECT v.embedding_id, e.person_id, v.distance "
+                f"SELECT v.embedding_id, e.person_id, v.distance, e.vector "
                 f"FROM {self._vec} v JOIN {self._embeddings} e USING (embedding_id) "
                 f"WHERE v.vector MATCH ? AND k = ? ORDER BY v.distance",
                 (self._to_blob(vector), k),
             ).fetchall()
-        return [Neighbor(int(r[0]), int(r[1]), 1.0 - float(r[2])) for r in rows]
+        return [
+            Neighbor(
+                int(r[0]), int(r[1]), 1.0 - float(r[2]),
+                Embedding.from_iterable(np.frombuffer(r[3], dtype=np.float32).tolist()),
+            )
+            for r in rows
+        ]
 
     # helpers
     @contextmanager

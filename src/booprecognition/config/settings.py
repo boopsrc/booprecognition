@@ -12,11 +12,13 @@ from typing import Any, Literal
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 CONFIG_ENV = "BOOP_CONFIG"
 TARGET_ENV = "BOOP_TARGET"
 DEFAULT_CONFIG_PATH = Path("config.yaml")
+
+EMBEDDING_PART_DIMENSION = 512  # tamanho do vetor de cada modelo ArcFace
 
 Target = Literal["firestore", "mongodb", "sqlite", "memory"]
 
@@ -34,22 +36,44 @@ class AlgorithmConfig(_Model):
     knn_k: int = Field(default=5, ge=1, le=1000)
     match_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
     # Vizinhos abaixo disso são considerados outra pessoa e não votam no KNN
-    min_neighbor_similarity: float = Field(default=0.4, ge=0.0, le=1.0)
+    min_neighbor_similarity: float = Field(default=0.45, ge=0.0, le=1.0)
     # O vizinho mais próximo do vencedor precisa ter ao menos essa similaridade
-    min_top_similarity: float = Field(default=0.55, ge=0.0, le=1.0)
+    min_top_similarity: float = Field(default=0.6, ge=0.0, le=1.0)
     # Diferença mínima entre o vencedor e a segunda pessoa mais parecida
-    min_margin: float = Field(default=0.08, ge=0.0, le=1.0)
+    min_margin: float = Field(default=0.1, ge=0.0, le=1.0)
+    # Vizinhos onde a segunda pessoa é procurada; precisa passar do histórico
+    # máximo de uma pessoa para que ela não esconda um sósia
+    margin_search_k: int = Field(default=20, ge=1, le=1000)
     # Identificação só realimenta o histórico com rostos muito parecidos, para
     # que um falso positivo não "contamine" a pessoa com vetores de outra
-    update_threshold: float = Field(default=0.65, ge=0.0, le=1.0)
+    update_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
     # Cadastro: similaridade com um rosto existente a partir da qual é a mesma pessoa
-    duplicate_threshold: float = Field(default=0.45, ge=0.0, le=1.0)
+    duplicate_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
     max_embeddings_person: int = Field(default=10, ge=1)
-    # Modelos InsightFace; mais de um = ensemble (dimensão 512 × N)
-    encoder_models: list[str] = Field(default_factory=lambda: ["buffalo_l"], min_length=1)
-    min_det_score: float = Field(default=0.6, ge=0.0, le=1.0)  # rostos borrados/artificiais
+    # Modelos InsightFace: o detector SCRFD-10G vem do primeiro; cada modelo
+    # contribui com um bloco de 512 dimensões (ensemble = 512 × N)
+    encoder_models: list[str] = Field(
+        default_factory=lambda: ["buffalo_l", "antelopev2"], min_length=1
+    )
+    # Ensemble: cada modelo sozinho precisa ter ao menos esse cosseno com o vencedor
+    min_model_agreement: float = Field(default=0.5, ge=0.0, le=1.0)
+    min_det_score: float = Field(default=0.7, ge=0.0, le=1.0)  # rostos borrados/artificiais
     max_yaw_ratio: float = Field(default=0.45, ge=0.0)  # rosto muito de perfil
     id_digits: int = Field(default=9, ge=6, le=18)
+
+    @model_validator(mode="after")
+    def _margin_sees_past_one_person(self) -> AlgorithmConfig:
+        if self.min_margin > 0 and self.margin_search_k <= self.max_embeddings_person:
+            raise ValueError(
+                "margin_search_k deve ser maior que max_embeddings_person "
+                f"({self.max_embeddings_person}); senão o histórico de uma pessoa "
+                "esconde a segunda mais parecida e min_margin não tem efeito"
+            )
+        return self
+
+    @property
+    def embedding_dimension(self) -> int:
+        return EMBEDDING_PART_DIMENSION * len(self.encoder_models)
 
 
 class FirestoreConfig(_Model):
@@ -79,7 +103,7 @@ class SqliteTablesConfig(_Model):
 
 class SqliteVectorSearchConfig(_Model):
     mode: Literal["brute_force", "sqlite_vec"] = "brute_force"
-    dimension: int = Field(default=512, ge=1)  # usado pela tabela vec0 do sqlite-vec
+    dimension: int = Field(default=1024, ge=1)  # 512 × modelos; tabela vec0 do sqlite-vec
 
 
 class SqliteConfig(_Model):
@@ -129,6 +153,16 @@ class Settings(_Model):
     setup_alg: AlgorithmConfig = Field(default_factory=AlgorithmConfig, alias="setup-alg")
     databases: DatabasesConfig = DatabasesConfig()
     auth: AuthConfig = AuthConfig()
+
+    @model_validator(mode="after")
+    def _sqlite_dimension_matches_models(self) -> Settings:
+        expected = self.setup_alg.embedding_dimension
+        if self.target == "sqlite" and self.databases.sqlite.vector_search.dimension != expected:
+            raise ValueError(
+                f"sqlite.vector_search.dimension deve ser {expected} "
+                f"(512 × {len(self.setup_alg.encoder_models)} modelos em encoder_models)"
+            )
+        return self
 
 
 def load_settings(path: str | Path | None = None) -> Settings:

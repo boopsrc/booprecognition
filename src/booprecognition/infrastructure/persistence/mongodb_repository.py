@@ -2,7 +2,7 @@
 
 Estrutura:
     {persons}    { _id: personId, identification, created_at, updated_at, embedding_ids }
-    {embeddings} { _id: embeddingId, embedding_id, person_id, vector: [512 floats], created_at }
+    {embeddings} { _id: embeddingId, embedding_id, person_id, vector: [1024 floats], created_at }
 
 Modos de busca:
     atlas        -> `$vectorSearch` (Atlas ou Community 8.2+ com mongot), cosseno
@@ -46,7 +46,7 @@ class MongoFaceRepository:
         self._num_candidates = num_candidates
         self._use_transactions = use_transactions
 
-    def ensure_indexes(self, dimension: int = 512) -> None:
+    def ensure_indexes(self, dimension: int = 1024) -> None:
         """Cria o índice por pessoa e, no modo atlas, o índice de busca vetorial."""
         self._embeddings.create_index([("person_id", ASCENDING)])
         if self._search_mode != "atlas":
@@ -134,26 +134,35 @@ class MongoFaceRepository:
                 "$project": {
                     "embedding_id": 1,
                     "person_id": 1,
+                    "vector": 1,
                     "score": {"$meta": "vectorSearchScore"},
                 }
             },
         ]
         # Atlas normaliza cosseno como score = (1 + cos) / 2
         return [
-            Neighbor(int(d["embedding_id"]), int(d["person_id"]), 2.0 * float(d["score"]) - 1.0)
+            Neighbor(
+                int(d["embedding_id"]),
+                int(d["person_id"]),
+                2.0 * float(d["score"]) - 1.0,
+                Embedding.from_iterable(d["vector"]) if d.get("vector") else None,
+            )
             for d in self._embeddings.aggregate(pipeline)
         ]
 
     def _nearest_brute_force(self, vector: Embedding, k: int) -> Sequence[Neighbor]:
         projection = {"embedding_id": 1, "person_id": 1, "vector": 1}
-        scored = [
-            Neighbor(
-                int(d["embedding_id"]),
-                int(d["person_id"]),
-                vector.cosine_similarity(Embedding.from_iterable(d["vector"])),
+        scored = []
+        for d in self._embeddings.find({}, projection):
+            stored = Embedding.from_iterable(d["vector"])
+            scored.append(
+                Neighbor(
+                    int(d["embedding_id"]),
+                    int(d["person_id"]),
+                    vector.cosine_similarity(stored),
+                    stored,
+                )
             )
-            for d in self._embeddings.find({}, projection)
-        ]
         return sorted(scored, key=lambda n: -n.similarity)[:k]
 
     # helpers

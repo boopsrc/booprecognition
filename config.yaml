@@ -7,14 +7,17 @@ project: booprecognition
 setup-alg:
   knn_k: 5                    # vizinhos consultados na busca KNN
   match_threshold: 0.5        # precision mínima para reconhecer a pessoa
-  min_top_similarity: 0.55    # o vizinho mais próximo do vencedor precisa ser ao menos isso
-  min_margin: 0.08            # vencedor precisa superar a 2ª pessoa por essa diferença
-  update_threshold: 0.65      # identificação só salva o rosto no histórico acima disso
-  min_neighbor_similarity: 0.4  # vizinhos abaixo disso são outra pessoa e não votam
-  duplicate_threshold: 0.45   # cadastro: similaridade a partir da qual é a mesma pessoa
+  min_top_similarity: 0.6     # o vizinho mais próximo do vencedor precisa ser ao menos isso
+  min_margin: 0.1             # vencedor precisa superar a 2ª pessoa por essa diferença
+  margin_search_k: 20         # vizinhos onde a 2ª pessoa é procurada (> max_embeddings_person)
+  update_threshold: 0.7       # identificação só salva o rosto no histórico acima disso
+  min_neighbor_similarity: 0.45 # vizinhos abaixo disso são outra pessoa e não votam
+  duplicate_threshold: 0.5    # cadastro: similaridade a partir da qual é a mesma pessoa
   max_embeddings_person: 10   # tamanho do histórico FIFO por pessoa
-  encoder_models: [buffalo_l] # InsightFace; ensemble: [buffalo_l, antelopev2] (1024-d)
-  min_det_score: 0.6          # recusa rostos borrados/artificiais
+  # SCRFD-10G (detector do 1º pacote) + ArcFace R50 (buffalo_l) + ArcFace R100 (antelopev2)
+  encoder_models: [buffalo_l, antelopev2]   # 512 × N dimensões
+  min_model_agreement: 0.5    # cada modelo sozinho precisa reconhecer a pessoa
+  min_det_score: 0.7          # recusa rostos borrados/artificiais
   max_yaw_ratio: 0.45         # recusa rostos muito de perfil
   id_digits: 9                # dígitos do identificador aleatório
 
@@ -46,7 +49,7 @@ databases:
       embeddings: boop_embeddings_history
     vector_search:
       mode: brute_force               # brute_force (numpy em memória) | sqlite_vec (extensão)
-      dimension: 512
+      dimension: 1024                 # 512 × modelos em encoder_models
 
 # OAuth 2.0 (client_credentials) com access token JWT
 auth:

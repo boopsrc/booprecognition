@@ -55,3 +55,65 @@ def test_ambiguous_between_two_people_is_rejected() -> None:
     classifier = KnnClassifier(k=5, threshold=0.3, min_margin=0.08)
     assert classifier.classify(neighbors) is None
     assert KnnClassifier(k=5, threshold=0.3, min_margin=0.02).classify(neighbors) is not None
+
+
+class _FixedEncoder:
+    def __init__(self, vector: tuple[float, ...]) -> None:
+        self._vector = vector
+
+    def encode(self, image: bytes):  # type: ignore[no-untyped-def]
+        from booprecognition.domain.value_objects import Embedding
+
+        return Embedding.from_iterable(self._vector)
+
+
+class _FixedIndex:
+    def __init__(self, neighbors: list[Neighbor]) -> None:
+        self._neighbors = neighbors
+
+    def nearest(self, vector, k):  # type: ignore[no-untyped-def]
+        return self._neighbors
+
+
+def _two_model_match(stored: tuple[float, ...]):  # type: ignore[no-untyped-def]
+    from booprecognition.application.use_cases.face_matcher import FaceMatcher
+    from booprecognition.domain.value_objects import Embedding
+
+    query = (1.0, 0.0, 1.0, 0.0)  # bloco do modelo 1 | bloco do modelo 2
+    stored_vec = Embedding.from_iterable(stored)
+    sim = Embedding.from_iterable(query).cosine_similarity(stored_vec)
+    neighbor = Neighbor(1, 10, sim, stored_vec)
+    matcher = FaceMatcher(
+        _FixedEncoder(query), _FixedIndex([neighbor]),
+        KnnClassifier(k=5, threshold=0.3), model_parts=2, min_model_agreement=0.5,
+    )
+    return matcher.match(b"x")
+
+
+def test_ensemble_models_agree() -> None:
+    assert _two_model_match((1.0, 0.1, 1.0, 0.1)).result is not None
+
+
+def test_ensemble_rejects_when_one_model_disagrees() -> None:
+    # Média dos cossenos ~0.6 passaria, mas o 2º modelo (cosseno ~0.2) discorda
+    attempt = _two_model_match((1.0, 0.0, 0.2, 0.98))
+    assert attempt.result is None
+
+
+def test_margin_finds_lookalike_beyond_k() -> None:
+    # Pessoa 10 tem histórico cheio e ocupa os K=5 primeiros; o sósia (20) vem logo depois
+    neighbors = [n(i, 10, 0.72 - i * 0.001) for i in range(1, 6)] + [n(9, 20, 0.69)]
+    assert KnnClassifier(k=5, threshold=0.5, min_margin=0.1).classify(neighbors) is not None
+    wide = KnnClassifier(k=5, threshold=0.5, min_margin=0.1, margin_search_k=20)
+    assert wide.search_k == 20
+    assert wide.classify(neighbors) is None
+
+
+def test_margin_search_k_must_exceed_history() -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    from booprecognition.config.settings import AlgorithmConfig
+
+    with pytest.raises(ValidationError, match="margin_search_k"):
+        AlgorithmConfig(margin_search_k=10, max_embeddings_person=10)

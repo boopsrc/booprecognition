@@ -24,6 +24,10 @@ class KnnClassifier:
     de jogo): o vizinho mais próximo do vencedor precisa ter similaridade
     >= `min_top_similarity`, e precisa superar o melhor vizinho de qualquer
     outra pessoa por pelo menos `min_margin` (resultado ambíguo = None).
+
+    A votação usa só os `k` mais próximos, mas a segunda pessoa é procurada em
+    `margin_search_k` vizinhos: quem tem histórico cheio ocupa sozinho os K
+    primeiros lugares e esconderia um sósia logo abaixo, anulando a margem.
     """
 
     k: int
@@ -31,9 +35,16 @@ class KnnClassifier:
     min_similarity: float = 0.3
     min_top_similarity: float = 0.0
     min_margin: float = 0.0
+    margin_search_k: int = 0
+
+    @property
+    def search_k(self) -> int:
+        """Quantos vizinhos pedir ao índice."""
+        return max(self.k, self.margin_search_k)
 
     def classify(self, neighbors: Sequence[Neighbor]) -> RecognitionResult | None:
-        nearest = sorted(neighbors, key=lambda n: -n.similarity)[: self.k]
+        ranked = sorted(neighbors, key=lambda n: -n.similarity)
+        nearest = ranked[: self.k]
         considered = [n for n in nearest if n.similarity >= self.min_similarity]
         if not considered:
             return None
@@ -56,7 +67,12 @@ class KnnClassifier:
         if top < self.min_top_similarity:
             return None
         runner_up = max(
-            (n.similarity for n in considered if n.person_id != winner_id), default=None
+            (
+                n.similarity
+                for n in ranked[: self.search_k]
+                if n.person_id != winner_id and n.similarity >= self.min_similarity
+            ),
+            default=None,
         )
         if runner_up is not None and top - runner_up < self.min_margin:
             return None

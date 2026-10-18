@@ -25,8 +25,12 @@ Todos vêm do [InsightFace](https://github.com/deepinsight/insightface) e rodam 
 
 | Pacote | Detector | Reconhecimento | Treino | Vetor |
 |---|---|---|---|---|
-| `buffalo_l` (padrão) | SCRFD-10G (`det_10g.onnx`) | ArcFace ResNet-50 (`w600k_r50.onnx`) | WebFace600K | 512-d |
-| `antelopev2` (ensemble opcional) | SCRFD-10G | ArcFace ResNet-100 (`glintr100.onnx`) | Glint360K | 512-d |
+| `buffalo_l` | **SCRFD-10G** (`det_10g.onnx`) — único detector usado | ArcFace ResNet-50 (`w600k_r50.onnx`) | WebFace600K | 512-d |
+| `antelopev2` | (não carregado) | ArcFace ResNet-100 (`glintr100.onnx`) | Glint360K | 512-d |
+
+Por padrão os três trabalham juntos: **um** detector SCRFD-10G e **dois** reconhecedores
+ArcFace, gerando um vetor de **1024 dimensões**. Do antelopev2 só o ONNX de
+reconhecimento é carregado (o detector dele é o mesmo SCRFD-10G).
 
 - **SCRFD** encontra os rostos e devolve, para cada um, a caixa (bbox), uma
   confiança (`det_score`) e 5 pontos de referência: olho esquerdo, olho direito,
@@ -40,8 +44,8 @@ O modelo é configurado em `config.yaml`:
 
 ```yaml
 setup-alg:
-  encoder_models: [buffalo_l]               # um modelo, 512-d
-  # encoder_models: [buffalo_l, antelopev2] # ensemble, 1024-d
+  encoder_models: [buffalo_l, antelopev2]   # padrão: ensemble, 1024-d
+  # encoder_models: [buffalo_l]            # um modelo, 512-d (mais rápido, menos preciso)
 ```
 
 ---
@@ -70,7 +74,7 @@ encontrados, fica o **maior** com pelo menos 40 px de lado.
 Rostos ruins geram vetores "genéricos", que parecem com todo mundo. Por isso o
 encoder recusa (erro `LowQualityFaceError`):
 
-- `det_score < min_det_score` (padrão `0.6`): rosto borrado, artificial ou parcial;
+- `det_score < min_det_score` (padrão `0.7`): rosto borrado, artificial ou parcial;
 - rosto de perfil: mede o deslocamento horizontal do nariz em relação ao centro
   dos olhos, dividido pela distância entre os olhos. Acima de `max_yaw_ratio`
   (padrão `0.45`) é recusado.
@@ -103,22 +107,28 @@ embeddings mais parecidos, cada um com `person_id` e similaridade:
 | SQLite | numpy em memória ou extensão `sqlite-vec` |
 
 ### 7. Votação e travas (`KnnClassifier`)
-1. descarta vizinhos com similaridade `< min_neighbor_similarity` (`0.4`);
+1. descarta vizinhos com similaridade `< min_neighbor_similarity` (`0.45`);
 2. agrupa por pessoa; vence quem tem a **maior soma** de similaridades;
 3. `precision = média das similaridades do vencedor × (votos dele / votos válidos)`;
 4. rejeita se `precision < match_threshold` (`0.5`);
-5. rejeita se o vizinho mais próximo do vencedor for `< min_top_similarity` (`0.55`);
-6. rejeita se o vencedor não superar a 2ª pessoa por `min_margin` (`0.08`).
+5. rejeita se o vizinho mais próximo do vencedor for `< min_top_similarity` (`0.6`);
+6. rejeita se o vencedor não superar a 2ª pessoa por `min_margin` (`0.1`). A 2ª
+   pessoa é procurada em `margin_search_k` (20) vizinhos, não só nos K=5: quem tem
+   histórico cheio (10 fotos) ocuparia sozinho os 5 primeiros e esconderia um sósia;
+7. **concordância dos modelos** (`FaceMatcher`): o vetor do rosto e o do melhor
+   vizinho do vencedor são divididos em blocos (um por modelo) e o cosseno de
+   **cada** bloco precisa ser `>= min_model_agreement` (`0.5`). A média alta não
+   basta: o R50 e o R100 precisam reconhecer a pessoa sozinhos.
 
 As travas 5 e 6 existem para casos como avatares/personagens de jogo: vários
 rostos medianamente parecidos não somam um reconhecimento.
 
 ### 8. Resposta e aprendizado
 - **Identificar** (`IdentifyPerson`): devolve a pessoa. O rosto novo só entra no
-  histórico dela se a similaridade for `>= update_threshold` (`0.65`). O
+  histórico dela se a similaridade for `>= update_threshold` (`0.7`). O
   histórico é FIFO com até `max_embeddings_person` (10) vetores.
 - **Cadastrar** (`RegisterPerson`): se o rosto já é reconhecido, ou se o vizinho
-  mais próximo tem similaridade `>= duplicate_threshold` (`0.45`), devolve a
+  mais próximo tem similaridade `>= duplicate_threshold` (`0.5`), devolve a
   pessoa existente em vez de criar outra. Senão gera um ID aleatório de 9
   dígitos e salva o primeiro embedding.
 
@@ -135,19 +145,21 @@ Exemplo de resposta:
 | Parâmetro | Padrão | Efeito |
 |---|---|---|
 | `knn_k` | 5 | vizinhos consultados |
-| `min_neighbor_similarity` | 0.4 | abaixo disso o vizinho não vota |
+| `min_neighbor_similarity` | 0.45 | abaixo disso o vizinho não vota |
 | `match_threshold` | 0.5 | precision mínima |
-| `min_top_similarity` | 0.55 | melhor vizinho do vencedor |
-| `min_margin` | 0.08 | distância para a 2ª pessoa |
-| `update_threshold` | 0.65 | mínimo para salvar no histórico |
-| `duplicate_threshold` | 0.45 | trava de cadastro duplicado |
+| `min_top_similarity` | 0.6 | melhor vizinho do vencedor |
+| `min_margin` | 0.1 | distância para a 2ª pessoa |
+| `margin_search_k` | 20 | vizinhos onde a 2ª pessoa é procurada (> `max_embeddings_person`) |
+| `update_threshold` | 0.7 | mínimo para salvar no histórico |
+| `duplicate_threshold` | 0.5 | trava de cadastro duplicado |
 | `max_embeddings_person` | 10 | tamanho do histórico |
-| `encoder_models` | `[buffalo_l]` | modelos do ensemble |
-| `min_det_score` | 0.6 | qualidade mínima da detecção |
+| `encoder_models` | `[buffalo_l, antelopev2]` | modelos do ensemble |
+| `min_model_agreement` | 0.5 | cosseno mínimo de cada modelo |
+| `min_det_score` | 0.7 | qualidade mínima da detecção |
 | `max_yaw_ratio` | 0.45 | limite de perfil |
 
-**Mais falsos positivos?** Suba `min_top_similarity` (0.6) e `min_margin`, ou
-ligue o ensemble. **Pessoa real não reconhecida?** Cadastre mais fotos dela ou
+**Mais falsos positivos?** Suba `min_top_similarity` (0.65),
+`min_margin` ou `min_model_agreement`. **Pessoa real não reconhecida?** Cadastre mais fotos dela ou
 desça `min_top_similarity` com cuidado.
 
 > Ao trocar `encoder_models` a dimensão muda (512 × N). Ajuste

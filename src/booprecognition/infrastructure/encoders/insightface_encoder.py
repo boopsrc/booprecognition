@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Iterator, Sequence
+from pathlib import Path
 
 import cv2
 import numpy as np
+from insightface import model_zoo
 from insightface.app import FaceAnalysis
-from insightface.utils import face_align
+from insightface.utils import face_align, storage
 
 from booprecognition.domain.errors import (
     InvalidImageError,
@@ -26,6 +28,7 @@ from booprecognition.domain.value_objects import Embedding
 _MAX_SIDE = 1600
 # Imagens muito pequenas são ampliadas para o detector enxergar o rosto.
 _MIN_SIDE = 320
+_INSIGHTFACE_ROOT = "~/.insightface"
 
 _Variant = Callable[[np.ndarray], np.ndarray]
 _Face = tuple[np.ndarray, np.ndarray]  # (bbox + score, 5 landmarks)
@@ -70,13 +73,13 @@ class InsightFaceEncoder:
             providers=providers,
         )
         self._app.prepare(ctx_id=0, det_size=det_size, det_thresh=det_thresh)
+        # O detector SCRFD-10G do primeiro pacote é o único usado; dos demais
+        # carregamos apenas o ONNX de reconhecimento.
         self._recognizers = [self._app.models["recognition"]]
         for name in model_names[1:]:
-            extra = FaceAnalysis(
-                name=name, allowed_modules=["detection", "recognition"], providers=providers
-            )
-            extra.prepare(ctx_id=0, det_size=det_size)
-            self._recognizers.append(extra.models["recognition"])
+            rec = model_zoo.get_model(_recognition_onnx(name), providers=providers)
+            rec.prepare(ctx_id=0)
+            self._recognizers.append(rec)
         self._det_thresh = det_thresh
         self._fallback_det_thresh = fallback_det_thresh
         self._min_face_size = min_face_size
@@ -168,6 +171,21 @@ class InsightFaceEncoder:
         if frame is None:
             raise InvalidImageError("Imagem inválida ou formato não suportado")
         return frame
+
+
+def _recognition_onnx(pack: str) -> str:
+    """Caminho do ONNX de reconhecimento de um pacote InsightFace, baixando se faltar.
+
+    O zip do antelopev2 extrai numa pasta aninhada (antelopev2/antelopev2/),
+    por isso os dois níveis são procurados.
+    """
+    root = Path(storage.ensure_available("models", pack, root=_INSIGHTFACE_ROOT))
+    for folder in (root, root / pack):
+        for candidate in sorted(folder.glob("*.onnx")):
+            # Reconhecedores ArcFace: w600k_r50, glintr100, ... (detector/landmarks ficam de fora)
+            if candidate.stem.startswith(("w600k", "glint", "webface", "arcface")):
+                return str(candidate)
+    raise FileNotFoundError(f"Modelo de reconhecimento não encontrado no pacote {pack} ({root})")
 
 
 def _pad(frame: np.ndarray) -> np.ndarray:

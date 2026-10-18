@@ -2,7 +2,7 @@
 
 Estrutura:
     persons/{personId}                         -> dados da pessoa + embedding_ids (FIFO)
-    persons/{personId}/embeddings/{embeddingId} -> vetor (Vector 512) + metadados
+    persons/{personId}/embeddings/{embeddingId} -> vetor (Vector 1024) + metadados
 
 A busca usa `find_nearest` no collection group `embeddings`, que exige um índice
 vetorial (ver README).
@@ -97,6 +97,7 @@ class FirestoreFaceRepository:
                     embedding_id=int(data["embedding_id"]),
                     person_id=int(data["person_id"]),
                     similarity=1.0 - float(data[_DISTANCE_FIELD]),
+                    vector=Embedding.from_iterable(list(data["vector"])),
                 )
             )
         return neighbors

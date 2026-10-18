@@ -11,7 +11,7 @@ Embeddings ArcFace · KNN vetorial no Firestore, MongoDB **ou** SQLite · Clean 
   <img alt="MongoDB" src="https://img.shields.io/badge/MongoDB-%24vectorSearch-47A248?logo=mongodb&logoColor=white">
   <img alt="SQLite" src="https://img.shields.io/badge/SQLite-local-003B57?logo=sqlite&logoColor=white">
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-HTTP-009688?logo=fastapi&logoColor=white">
-  <img alt="InsightFace" src="https://img.shields.io/badge/InsightFace-ArcFace%20512d-7c3aed">
+  <img alt="InsightFace" src="https://img.shields.io/badge/InsightFace-ArcFace%20R50%2BR100%201024d-7c3aed">
 </p>
 
 </div>
@@ -21,7 +21,7 @@ Embeddings ArcFace · KNN vetorial no Firestore, MongoDB **ou** SQLite · Clean 
 <td width="33%" valign="top">
 
 ### 🔒 Sem imagens
-Só o **vetor** do rosto (512 números) é salvo. A foto é descartada logo depois do processamento.
+Só o **vetor** do rosto (1024 números) é salvo. A foto é descartada logo depois do processamento.
 
 </td>
 <td width="33%" valign="top">
@@ -117,10 +117,12 @@ Os clientes ficam em `auth.clients` no `config.yaml`. O `client_secret` de cada 
 ![Fluxo de identificação](docs/identify-flow.png)
 
 1. A imagem chega em bytes e **não é salva**.
-2. O **InsightFace** detecta o maior rosto e gera um vetor ArcFace de 512 dimensões, normalizado (L2).
+2. O **SCRFD-10G** detecta o maior rosto e dois modelos ArcFace (**buffalo_l** R50 e **antelopev2** R100) geram 512 dimensões cada; os blocos são normalizados e concatenados (1024-d). Veja [docs/reconhecimento-facial.md](docs/reconhecimento-facial.md).
 3. O banco escolhido em `target` devolve os K=5 vetores mais próximos por cosseno: `find_nearest` no **Firestore** `$vectorSearch` no **MongoDB** ou cosseno vetorizado no **SQLite**.
 4. O **KnnClassifier** soma os votos de cada pessoa, ponderados pela similaridade.
 5. Se `precision ≥ threshold`, responde e grava o vetor novo no histórico; senão retorna `null`.
+
+> ⚠️ **Migração para o ensemble (1024-d):** vetores antigos de 512-d (só buffalo_l) não são comparáveis. Limpe as coleções/tabelas de embeddings, recrie o índice vetorial com 1024 dimensões e recadastre as pessoas.
 
 ---
 
@@ -136,7 +138,7 @@ persons/{personId}
  ├─ embedding_ids: [213, 245, …]          ← ordem do mais antigo ao mais novo, ≤ 10
  └─ embeddings/{embeddingId}
      ├─ embedding_id, person_id
-     ├─ vector: Vector(512)               ← único dado biométrico guardado
+     ├─ vector: Vector(1024)              ← único dado biométrico guardado
      └─ created_at
 ```
 
@@ -151,7 +153,7 @@ Cada identificação acrescenta um vetor recente da pessoa, com outra luz, outro
 <summary><b>Criar o índice vetorial (obrigatório)</b></summary>
 
 ```bash
-gcloud firestore indexes composite create --collection-group=embeddings --query-scope=COLLECTION_GROUP --field-config=field-path=vector,vector-config='{"dimension":"512","flat":"{}"}'
+gcloud firestore indexes composite create --collection-group=embeddings --query-scope=COLLECTION_GROUP --field-config=field-path=vector,vector-config='{"dimension":"1024","flat":"{}"}'
 ```
 Crie um índice para cada nome de coleção de embeddings (por exemplo `embeddings_it`, usado nos testes de integração).
 </details>
@@ -160,7 +162,7 @@ Crie um índice para cada nome de coleção de embeddings (por exemplo `embeddin
 
 ```
 boop-persons             { _id: personId, identification, created_at, updated_at, embedding_ids[≤10] }
-boop-embeddings-history  { _id: embeddingId, embedding_id, person_id, vector: [512 floats], created_at }
+boop-embeddings-history  { _id: embeddingId, embedding_id, person_id, vector: [1024 floats], created_at }
 ```
 
 O mesmo FIFO vale aqui: inserir o novo, apagar o mais antigo e atualizar a pessoa acontecem numa **transação** (`use_transactions: true`, exige replica set ou Atlas).
@@ -176,7 +178,7 @@ Na inicialização, o motor cria o índice `person_id` e, no modo `atlas`, o ín
   "type": "vectorSearch",
   "definition": {
     "fields": [
-      { "type": "vector", "path": "vector", "numDimensions": 512, "similarity": "cosine" },
+      { "type": "vector", "path": "vector", "numDimensions": 1024, "similarity": "cosine" },
       { "type": "filter", "path": "person_id" }
     ]
   }
@@ -242,10 +244,11 @@ setup-alg:
   knn_k: 5
   match_threshold: 0.5
   max_embeddings_person: 10
-  min_top_similarity: 0.55
-  min_margin: 0.08
-  update_threshold: 0.65
-  encoder_models: [buffalo_l]   # ensemble: [buffalo_l, antelopev2]
+  min_top_similarity: 0.6
+  min_margin: 0.1
+  update_threshold: 0.7
+  encoder_models: [buffalo_l, antelopev2]   # SCRFD-10G + ArcFace R50 + R100
+  min_model_agreement: 0.5
   id_digits: 9
 
 databases:
@@ -276,7 +279,7 @@ databases:
       embeddings: boop_embeddings_history
     vector_search:
       mode: brute_force        # brute_force | sqlite_vec
-      dimension: 512
+      dimension: 1024           # 512 × modelos
 ```
 
 <table>

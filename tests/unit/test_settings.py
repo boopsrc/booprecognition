@@ -85,3 +85,16 @@ def test_mongodb_requires_uri_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     monkeypatch.delenv("BOOP_MONGODB_URI", raising=False)
     with pytest.raises(RuntimeError, match="BOOP_MONGODB_URI"):
         build_repository(load_settings(write(tmp_path, "target: mongodb\n")))
+
+
+def test_ensemble_dimension_must_match_sqlite() -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    from booprecognition.config.settings import Settings
+
+    assert Settings.model_validate({"target": "sqlite"}).setup_alg.embedding_dimension == 1024
+    with pytest.raises(ValidationError, match="dimension deve ser 512"):
+        Settings.model_validate(
+            {"target": "sqlite", "setup-alg": {"encoder_models": ["buffalo_l"]}}
+        )

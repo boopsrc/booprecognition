@@ -9,8 +9,9 @@ COPY src ./src
 COPY config.yaml ./
 RUN pip install --no-cache-dir ".[all]"
 
-# Baixa o modelo ArcFace no build para evitar latência na primeira requisição
-RUN python -c "from insightface.app import FaceAnalysis; FaceAnalysis(name='buffalo_l', allowed_modules=['detection','recognition']).prepare(ctx_id=0)"
+# Baixa os modelos no build para evitar latência na primeira requisição:
+# buffalo_l (SCRFD-10G + ArcFace R50) e antelopev2 (ArcFace R100)
+RUN python -c "from booprecognition.infrastructure.encoders.insightface_encoder import InsightFaceEncoder; InsightFaceEncoder(model_names=['buffalo_l', 'antelopev2'])"
 
 EXPOSE 8000
 CMD ["booprecognition", "serve", "--port", "8000"]

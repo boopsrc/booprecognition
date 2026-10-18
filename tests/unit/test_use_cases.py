@@ -24,7 +24,8 @@ class FakeEncoder:
     def encode(self, image: bytes) -> Embedding:
         base = FACES[image[:1]]
         noise = len(image) * 0.01
-        return Embedding.from_iterable((base[0] + noise, base[1] + noise, base[2] + noise))
+        block = (base[0] + noise, base[1] + noise, base[2] + noise)
+        return Embedding.from_iterable(block * 2)  # dois blocos, como o ensemble real
 
 
 class SequentialIds:

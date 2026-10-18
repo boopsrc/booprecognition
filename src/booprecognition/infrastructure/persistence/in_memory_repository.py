@@ -52,7 +52,9 @@ class InMemoryFaceRepository:
     def nearest(self, vector: Embedding, k: int) -> Sequence[Neighbor]:
         with self._lock:
             scored = [
-                Neighbor(e.embedding_id, e.person_id, vector.cosine_similarity(e.vector))
+                Neighbor(
+                    e.embedding_id, e.person_id, vector.cosine_similarity(e.vector), e.vector
+                )
                 for e in self._embeddings.values()
             ]
         return sorted(scored, key=lambda n: -n.similarity)[:k]

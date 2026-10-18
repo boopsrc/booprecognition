@@ -87,15 +87,16 @@ footer{padding:32px 0 56px;color:var(--muted);font-size:14px}
   <div class="grid">
     <div class="card"><span class="tag">Detecção</span><h3>SCRFD-10G</h3>
       <p>Arquivo <code>det_10g.onnx</code>. Encontra os rostos e devolve a caixa, a confiança (<code>det_score</code>) e 5 pontos: olhos, nariz e cantos da boca.</p></div>
-    <div class="card"><span class="tag">Reconhecimento · padrão</span><h3>buffalo_l — ArcFace R50</h3>
+    <div class="card"><span class="tag">Reconhecimento · 1º bloco</span><h3>buffalo_l — ArcFace R50</h3>
       <p>Arquivo <code>w600k_r50.onnx</code>, treinado na WebFace600K. Gera um vetor de 512 números.</p></div>
-    <div class="card"><span class="tag">Reconhecimento · ensemble</span><h3>antelopev2 — ArcFace R100</h3>
-      <p>Arquivo <code>glintr100.onnx</code>, rede maior treinada na Glint360K. Combinado com o buffalo_l gera 1024 dimensões.</p></div>
+    <div class="card"><span class="tag">Reconhecimento · 2º bloco</span><h3>antelopev2 — ArcFace R100</h3>
+      <p>Arquivo <code>glintr100.onnx</code>, rede maior treinada na Glint360K. Só o reconhecedor é carregado; o detector é o mesmo SCRFD-10G.</p></div>
   </div>
-  <p style="margin-top:16px"><strong>Por que ArcFace?</strong> Ele é treinado com <em>additive angular margin loss</em>: vetores da mesma pessoa ficam com ângulo pequeno entre si e de pessoas diferentes ficam afastados. Por isso a comparação é pela <strong>similaridade de cosseno</strong> (1 = idêntico, perto de 0 = sem relação).</p>
+  <div class="note good" style="margin-top:16px"><strong>Os três juntos, por padrão:</strong> 1 detector SCRFD-10G + 2 reconhecedores ArcFace = vetor de <strong>1024 dimensões</strong>, e os dois modelos precisam concordar.</div>
+  <p><strong>Por que ArcFace?</strong> Ele é treinado com <em>additive angular margin loss</em>: vetores da mesma pessoa ficam com ângulo pequeno entre si e de pessoas diferentes ficam afastados. Por isso a comparação é pela <strong>similaridade de cosseno</strong> (1 = idêntico, perto de 0 = sem relação).</p>
   <pre><code>setup-alg:
-  encoder_models: [buffalo_l]               # 512-d
-  # encoder_models: [buffalo_l, antelopev2] # ensemble, 1024-d</code></pre>
+  encoder_models: [buffalo_l, antelopev2]   # padrão, 1024-d
+  # encoder_models: [buffalo_l]            # um modelo, 512-d</code></pre>
 </section>
 
 <section id="passos">
@@ -109,7 +110,7 @@ footer{padding:32px 0 56px;color:var(--muted);font-size:14px}
       <p class="muted">Da 2ª tentativa em diante a confiança mínima cai para 0.3. Fica o <strong>maior</strong> rosto com pelo menos 40 px.</p></li>
     <li><h3>Filtro de qualidade</h3>
       <p>Rostos ruins geram vetores genéricos que "parecem" com todo mundo, então são recusados com <code>LowQualityFaceError</code>:</p>
-      <ul><li><code>det_score &lt; 0.6</code>: borrado, parcial ou artificial;</li>
+      <ul><li><code>det_score &lt; 0.7</code>: borrado, parcial ou artificial;</li>
       <li>perfil: deslocamento do nariz em relação ao centro dos olhos ÷ distância entre os olhos &gt; <code>0.45</code>.</li></ul></li>
     <li><h3>Alinhamento</h3>
       <p>Com os 5 pontos, <code>face_align.norm_crop</code> leva olhos, nariz e boca para posições fixas num recorte de <strong>112×112</strong>, o formato que o ArcFace espera.</p></li>
@@ -122,8 +123,8 @@ footer{padding:32px 0 56px;color:var(--muted);font-size:14px}
         <tr><td>SQLite</td><td>numpy em memória ou <code>sqlite-vec</code></td></tr></table></div></li>
     <li><h3>Votação e travas</h3><p>Veja <a href="#decisao">Decisão</a>.</p></li>
     <li><h3>Resposta e aprendizado</h3>
-      <p><strong>Identificar:</strong> devolve a pessoa e só salva o rosto no histórico (FIFO de 10) se a similaridade for ≥ <code>0.65</code>, para um falso positivo não virar referência.</p>
-      <p><strong>Cadastrar:</strong> se o rosto já é reconhecido ou o vizinho mais próximo tem similaridade ≥ <code>0.45</code>, devolve a pessoa existente; senão cria um ID aleatório de 9 dígitos.</p>
+      <p><strong>Identificar:</strong> devolve a pessoa e só salva o rosto no histórico (FIFO de 10) se a similaridade for ≥ <code>0.7</code>, para um falso positivo não virar referência.</p>
+      <p><strong>Cadastrar:</strong> se o rosto já é reconhecido ou o vizinho mais próximo tem similaridade ≥ <code>0.5</code>, devolve a pessoa existente; senão cria um ID aleatório de 9 dígitos.</p>
       <pre><code>{ "identification": 482913057, "precision": 0.87, "history": [213, 245, 345] }</code></pre></li>
   </ol>
 </section>
@@ -160,11 +161,12 @@ footer{padding:32px 0 56px;color:var(--muted);font-size:14px}
 <section id="decisao">
   <h2>Decisão: votação KNN e travas</h2>
   <ol class="steps">
-    <li><h3>Filtrar</h3><p>Vizinhos com similaridade &lt; <code>min_neighbor_similarity</code> (0.4) não votam.</p></li>
+    <li><h3>Filtrar</h3><p>Vizinhos com similaridade &lt; <code>min_neighbor_similarity</code> (0.45) não votam.</p></li>
     <li><h3>Votar</h3><p>Agrupa por pessoa; vence quem tiver a maior <strong>soma</strong> de similaridades.</p></li>
     <li><h3>Precision</h3><pre><code>precision = média(similaridades do vencedor) × votos do vencedor / votos válidos</code></pre><p>Rejeita se &lt; <code>match_threshold</code> (0.5).</p></li>
-    <li><h3>Trava do melhor vizinho</h3><p>O vizinho mais próximo do vencedor precisa ter ≥ <code>min_top_similarity</code> (0.55). Vários rostos "mais ou menos" parecidos não somam um reconhecimento.</p></li>
-    <li><h3>Trava de margem</h3><p>O vencedor precisa superar a 2ª pessoa por ≥ <code>min_margin</code> (0.08). Se estiver empatado, a resposta é "não reconhecido".</p></li>
+    <li><h3>Trava do melhor vizinho</h3><p>O vizinho mais próximo do vencedor precisa ter ≥ <code>min_top_similarity</code> (0.6). Vários rostos "mais ou menos" parecidos não somam um reconhecimento.</p></li>
+    <li><h3>Trava de margem</h3><p>O vencedor precisa superar a 2ª pessoa por ≥ <code>min_margin</code> (0.1). Se estiver empatado, a resposta é "não reconhecido". A 2ª pessoa é procurada em <code>margin_search_k</code> (20) vizinhos: com só os 5 primeiros, uma pessoa com histórico cheio esconderia um sósia logo abaixo.</p></li>
+    <li><h3>Concordância dos modelos</h3><p>O vetor é dividido em blocos (R50 e R100) e o cosseno de <strong>cada</strong> bloco com o melhor vizinho do vencedor precisa ser ≥ <code>min_model_agreement</code> (0.5). Média alta com um modelo discordando = não reconhecido.</p></li>
   </ol>
   <div class="note">Essas travas existem para casos como avatares e personagens de jogo (ex.: Aion), cujos rostos renderizados ficam parecidos entre si e com pessoas reais.</div>
 </section>
@@ -174,19 +176,21 @@ footer{padding:32px 0 56px;color:var(--muted);font-size:14px}
   <div class="table-wrap"><table>
     <tr><th>Parâmetro</th><th>Padrão</th><th>Efeito</th></tr>
     <tr><td><code>knn_k</code></td><td>5</td><td>vizinhos consultados</td></tr>
-    <tr><td><code>min_neighbor_similarity</code></td><td>0.4</td><td>abaixo disso o vizinho não vota</td></tr>
+    <tr><td><code>min_neighbor_similarity</code></td><td>0.45</td><td>abaixo disso o vizinho não vota</td></tr>
     <tr><td><code>match_threshold</code></td><td>0.5</td><td>precision mínima</td></tr>
-    <tr><td><code>min_top_similarity</code></td><td>0.55</td><td>melhor vizinho do vencedor</td></tr>
-    <tr><td><code>min_margin</code></td><td>0.08</td><td>distância para a 2ª pessoa</td></tr>
-    <tr><td><code>update_threshold</code></td><td>0.65</td><td>mínimo para salvar no histórico</td></tr>
-    <tr><td><code>duplicate_threshold</code></td><td>0.45</td><td>trava de cadastro duplicado</td></tr>
+    <tr><td><code>min_top_similarity</code></td><td>0.6</td><td>melhor vizinho do vencedor</td></tr>
+    <tr><td><code>min_margin</code></td><td>0.1</td><td>distância para a 2ª pessoa</td></tr>
+    <tr><td><code>margin_search_k</code></td><td>20</td><td>vizinhos onde a 2ª pessoa é procurada</td></tr>
+    <tr><td><code>update_threshold</code></td><td>0.7</td><td>mínimo para salvar no histórico</td></tr>
+    <tr><td><code>duplicate_threshold</code></td><td>0.5</td><td>trava de cadastro duplicado</td></tr>
     <tr><td><code>max_embeddings_person</code></td><td>10</td><td>tamanho do histórico FIFO</td></tr>
-    <tr><td><code>encoder_models</code></td><td>[buffalo_l]</td><td>modelos do ensemble</td></tr>
-    <tr><td><code>min_det_score</code></td><td>0.6</td><td>qualidade mínima da detecção</td></tr>
+    <tr><td><code>encoder_models</code></td><td>[buffalo_l, antelopev2]</td><td>modelos do ensemble</td></tr>
+    <tr><td><code>min_model_agreement</code></td><td>0.5</td><td>cosseno mínimo de cada modelo</td></tr>
+    <tr><td><code>min_det_score</code></td><td>0.7</td><td>qualidade mínima da detecção</td></tr>
     <tr><td><code>max_yaw_ratio</code></td><td>0.45</td><td>limite de rosto de perfil</td></tr>
   </table></div>
   <div class="grid">
-    <div class="card"><h3>Muitos falsos positivos?</h3><p>Suba <code>min_top_similarity</code> para ~0.6, aumente <code>min_margin</code> ou ligue o ensemble.</p></div>
+    <div class="card"><h3>Muitos falsos positivos?</h3><p>Suba <code>min_top_similarity</code> para ~0.65, aumente <code>min_margin</code> ou <code>min_model_agreement</code>.</p></div>
     <div class="card"><h3>Pessoa real não reconhecida?</h3><p>Cadastre mais fotos dela ou desça <code>min_top_similarity</code> com cuidado.</p></div>
   </div>
   <div class="note">Trocar <code>encoder_models</code> muda a dimensão (512 × N). Ajuste <code>sqlite.vector_search.dimension</code>, recrie o índice vetorial do Mongo/Firestore e recadastre as pessoas: vetores de modelos diferentes não são comparáveis.</div>
